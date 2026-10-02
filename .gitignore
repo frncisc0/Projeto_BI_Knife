@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+uploads/
+reports/
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+*.csv
+!test-data/*.csv
+!test-data/*.xlsx
+*.parquet
+*.log

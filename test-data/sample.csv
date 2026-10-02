@@ -1,0 +1,6 @@
+id,cliente,categoria,valor,data
+1001,Ana Silva,Material,120.50,2026-01-12
+1002,Bruno Lima,Serviço,80.00,2026-01-13
+1003,Ana Silva,Material,,2026-01-14
+1004,Caio Souza,Frete,25.75,data-inválida
+1004,Caio Souza,Frete,25.75,data-inválida
