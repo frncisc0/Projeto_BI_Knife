@@ -8,6 +8,7 @@ O backend executa localmente. Não há API externa, analytics, telemetria, CDN o
 
 - Extensões aceitas: `.csv` e `.xlsx`; formatos com macros não são aceitos.
 - O limite inicial é 100 MB, configurável por `BI_MAX_FILE_SIZE_MB`.
+- Lotes aceitam até 50 arquivos e 500 MB no total, ajustáveis por `BI_MAX_FILES_PER_BATCH` e `BI_MAX_BATCH_SIZE_MB`.
 - O nome informado nunca é usado para criar caminho de arquivo: o conteúdo é processado em memória e nomes de caminho são reduzidos ao nome-base.
 - CSV passa por decodificação e validação de cabeçalho. XLSX precisa ter estrutura ZIP esperada e vínculos externos são recusados.
 - A leitura usa bibliotecas de dados; macros ou fórmulas não são executadas.

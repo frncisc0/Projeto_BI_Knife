@@ -18,6 +18,15 @@ def validate_filename(filename: str | None) -> tuple[str, str]:
     return safe_name, extension
 
 
+def display_filename(filename: str | None) -> str:
+    """Keep a sanitized relative label for UI display; never use it as a path."""
+    normalized = (filename or "arquivo").replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part not in {"", ".", ".."}]
+    if parts and parts[0].endswith(":"):
+        parts = parts[1:]
+    return "/".join(parts) or "arquivo"
+
+
 def validate_upload(filename: str | None, content: bytes) -> tuple[str, str, str | None]:
     safe_name, extension = validate_filename(filename)
     settings = get_settings()

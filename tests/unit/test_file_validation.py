@@ -4,13 +4,18 @@ import zipfile
 import pytest
 
 from app.core.exceptions import FileValidationError
-from app.security.file_validation import validate_filename, validate_upload
+from app.security.file_validation import display_filename, validate_filename, validate_upload
 
 
 def test_path_like_filename_is_reduced_to_basename():
     filename, extension = validate_filename(r"..\private\sales.csv")
     assert filename == "sales.csv"
     assert extension == ".csv"
+
+
+def test_display_filename_preserves_only_safe_relative_label():
+    assert display_filename(r"C:\\Sales\\2026\\jan.csv") == "Sales/2026/jan.csv"
+    assert display_filename("../../private.csv") == "private.csv"
 
 
 def test_disallowed_extension_is_rejected():

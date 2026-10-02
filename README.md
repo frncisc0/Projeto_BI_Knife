@@ -1,6 +1,6 @@
 # BI Swiss Knife
 
-Aplicação local para inspecionar arquivos `.xlsx` e `.csv`, visualizar estrutura, qualidade básica e estatísticas. A versão atual é **0.1.0**, em desenvolvimento.
+Aplicação local para inspecionar arquivos `.xlsx` e `.csv`, visualizar estrutura, qualidade básica e estatísticas. A versão atual é **0.2.0**, em desenvolvimento.
 
 ## Requisitos
 
@@ -20,7 +20,9 @@ Abra http://127.0.0.1:8000. O servidor escuta somente no loopback por padrão. U
 
 ## Funcionalidades
 
-- Upload local de CSV e XLSX, com descoberta de abas.
+- Upload local de vários CSV e XLSX, inclusive ao soltar pastas, com descoberta de abas.
+- Seleção de arquivos múltiplos ou pasta; subpastas também são percorridas ao arrastar a pasta (Chrome/Edge).
+- Lotes de até 50 arquivos, 100 MB por arquivo e 500 MB no total por padrão; arquivos com erro são informados sem interromper os demais.
 - Perfil de colunas com tipos inferidos, nulos, distintos, repetidos, valores inconsistentes e candidatas a chave.
 - Estatísticas numéricas, intervalos de datas, frequências e prévia limitada.
 - Contagem de linhas duplicadas e sugestões heurísticas de relacionamentos entre abas.

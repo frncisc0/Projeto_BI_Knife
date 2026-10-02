@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 — 2026-10-02
+
+### Added
+- Seleção e análise de múltiplos arquivos CSV/XLSX, incluindo pastas arrastadas ou selecionadas.
+- Relatório de lote com erros por arquivo, limites configuráveis e exportação JSON agrupada.
+
 ## 0.1.0 — 2026-10-02
 
 ### Added

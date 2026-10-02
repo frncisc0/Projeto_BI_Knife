@@ -7,8 +7,10 @@ class Settings:
     """Centralized settings with conservative local defaults."""
 
     app_name = "BI Swiss Knife"
-    version = "0.1.0"
+    version = "0.2.0"
     max_file_size_mb = int(os.getenv("BI_MAX_FILE_SIZE_MB", "100"))
+    max_files_per_batch = int(os.getenv("BI_MAX_FILES_PER_BATCH", "50"))
+    max_batch_size_mb = int(os.getenv("BI_MAX_BATCH_SIZE_MB", "500"))
     max_rows_to_preview = int(os.getenv("BI_MAX_ROWS_TO_PREVIEW", "20"))
     max_unique_values = int(os.getenv("BI_MAX_UNIQUE_VALUES", "10"))
     max_category_display = int(os.getenv("BI_MAX_CATEGORY_DISPLAY", "10"))
