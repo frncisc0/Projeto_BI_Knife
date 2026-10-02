@@ -31,6 +31,39 @@ def test_xlsx_requires_workbook_structure():
         validate_upload("fake.xlsx", buffer.getvalue())
 
 
+def test_xlsx_external_relationships_are_rejected():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("xl/workbook.xml", "<workbook/>")
+        archive.writestr("_rels/.rels", '<Relationships><Relationship TargetMode="External" Target="https://example.test"/></Relationships>')
+    with pytest.raises(FileValidationError, match="referências externas"):
+        validate_upload("external.xlsx", buffer.getvalue())
+
+
+def test_xlsx_embedded_macro_content_is_rejected():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("xl/workbook.xml", "<workbook/>")
+        archive.writestr("xl/vbaProject.bin", b"synthetic-macro")
+    with pytest.raises(FileValidationError, match="macros"):
+        validate_upload("macro.xlsx", buffer.getvalue())
+
+
+def test_xlsx_xml_entity_declarations_are_rejected_before_parsing():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("xl/workbook.xml", "<workbook/>")
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<!DOCTYPE worksheet [<!ENTITY expanded "synthetic">]><worksheet>&expanded;</worksheet>',
+        )
+    with pytest.raises(FileValidationError, match="declarações XML"):
+        validate_upload("entity.xlsx", buffer.getvalue())
+
+
 def test_csv_accepts_latin1_semicolon():
     name, kind, encoding = validate_upload("fornecedores.csv", "id;nome\n1;André\n".encode("cp1252"))
     assert (name, kind) == ("fornecedores.csv", "csv")

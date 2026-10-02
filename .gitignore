@@ -6,6 +6,10 @@ venv/
 .env
 uploads/
 reports/
+reports/generated/
+logs/
+temp/
+cache/
 *.xlsx
 *.xls
 *.xlsm

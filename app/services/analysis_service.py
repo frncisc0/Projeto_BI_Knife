@@ -1,66 +1,358 @@
+from datetime import datetime
+from hashlib import sha256
+import time
+import uuid
 from typing import Any
 
 import pandas as pd
 
 from app.analyzers.file_analyzer import read_tables
-from app.analyzers.quality_analyzer import duplicate_row_count, inconsistent_value_count, invalid_date_count
+from app.analyzers.quality_analyzer import (
+    duplicate_row_count,
+    inconsistent_value_count,
+    invalid_date_count,
+    null_band,
+    numeric_anomalies,
+)
 from app.analyzers.relationship_analyzer import suggest_relationships
-from app.analyzers.schema_analyzer import infer_type
+from app.analyzers.schema_analyzer import infer_type, physical_type, sensitive_reason, semantic_role, type_confidence, type_reason
 from app.analyzers.statistics_analyzer import statistics
 from app.core.config import get_settings
-from app.models.analysis_models import ColumnAnalysis, FileAnalysis, TableAnalysis
+from app.core.exceptions import AnalysisError
+from app.models.analysis_models import Anomaly, AnalysisReport, ColumnAnalysis, QualityAnalysis, StatisticsAnalysis, TableAnalysis
 
 
-def _safe(value: Any) -> Any:
+KEY_NAME_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número")
+
+
+def _clean(value: Any) -> Any:
     if pd.isna(value):
         return None
     if hasattr(value, "isoformat"):
         return value.isoformat()
     if hasattr(value, "item"):
         value = value.item()
+    if isinstance(value, float) and not pd.notna(value):
+        return None
     return value if isinstance(value, (str, int, float, bool)) else str(value)
 
 
-def analyze_file(filename: str, file_type: str, content: bytes, csv_encoding: str | None = None) -> FileAnalysis:
-    frames = read_tables(content, file_type, csv_encoding)
-    tables: list[TableAnalysis] = []
+def _cardinality(distinct: int, count: int) -> str:
+    if count == 0 or distinct <= 1:
+        return "constante"
+    ratio = distinct / count
+    return "baixa" if ratio <= 0.05 else "média" if ratio <= 0.5 else "alta"
+
+
+def _key_info(name: str, complete_pct: float, unique_pct: float, sampled: bool) -> tuple[bool, str | None, list[str]]:
+    reasons: list[str] = []
+    if complete_pct < 95 or unique_pct < 95:
+        return False, None, reasons
+    reasons.append(f"{complete_pct:.1f}% preenchida")
+    reasons.append(f"{unique_pct:.1f}% única")
+    name_match = any(term in name.casefold() for term in KEY_NAME_TERMS)
+    if name_match:
+        reasons.append("nome compatível com identificador")
+    confidence = "high" if complete_pct == 100 and unique_pct == 100 and not sampled else "medium"
+    return True, confidence, reasons
+
+
+def _composite_keys(frame: pd.DataFrame, single_keys: set[str], sampled: bool) -> list[dict[str, Any]]:
+    candidates = []
+    if len(frame.columns) < 2 or frame.empty:
+        return candidates
+    eligible = []
+    for name in frame.columns:
+        series = frame[name]
+        if series.notna().all() and series.nunique() / len(frame) >= 0.5:
+            eligible.append(name)
+    eligible = eligible[:12]
+    for index, first in enumerate(eligible):
+        if first in single_keys:
+            continue
+        for second in eligible[index + 1:]:
+            if second in single_keys:
+                continue
+            pair = frame[[first, second]]
+            unique_pct = pair.drop_duplicates().shape[0] / len(pair) * 100
+            if unique_pct >= 98 and frame[first].nunique() < len(frame) and frame[second].nunique() < len(frame):
+                candidates.append({
+                    "columns": [str(first), str(second)], "confidence": "medium" if not sampled else "low",
+                    "uniqueness_pct": round(unique_pct, 1),
+                    "reasons": ["A combinação é mais única do que cada coluna isolada.",
+                                "Avaliada sobre uma amostra." if sampled else "Sem nulos na combinação."],
+                })
+                if len(candidates) >= 5:
+                    return candidates
+    return candidates
+
+
+def _table_kind(name: str, frame: pd.DataFrame) -> tuple[str, str, str]:
+    normalized = name.casefold()
+    if any(word in normalized for word in ("venda", "pedido", "transa", "movimento", "fato", "order", "sale")):
+        return "provável tabela fato/transacional", "medium", "O nome da aba sugere eventos ou transações."
+    if any(word in normalized for word in ("cliente", "produto", "fornecedor", "cadastro", "dimens", "reference", "ref_")):
+        return "provável dimensão/cadastro", "medium", "O nome da aba sugere cadastro ou entidade de referência."
+    if len(frame) and len(frame.columns) <= 5 and all(frame[column].nunique(dropna=True) / max(1, len(frame)) > 0.8 for column in frame.columns):
+        return "possível tabela de referência", "low", "A tabela é compacta e possui alta unicidade por coluna."
+    return "tipo indeterminado", "low", "Não há evidência suficiente para classificar esta tabela."
+
+
+def _quality(rows: int, columns: int, null_count: int, invalid_count: int, duplicate_rows: int,
+             cells_override: int | None = None, inconsistent_columns: int = 0,
+             integrity_pct: float | None = None) -> QualityAnalysis:
     settings = get_settings()
+    cells = max(1, cells_override if cells_override is not None else rows * columns)
+    no_structure = rows == 0 or columns == 0
+    completeness = 0.0 if no_structure else max(0.0, 100 - null_count / cells * 100)
+    uniqueness = max(0.0, 100 - duplicate_rows / max(1, rows) * 100)
+    validity = max(0.0, 100 - invalid_count / max(1, cells - null_count) * 100)
+    consistency = max(0.0, 100 - inconsistent_columns / max(1, columns) * 100)
+    dimensions = {
+        "completeness": (completeness, settings.quality_completeness_weight),
+        "uniqueness": (uniqueness, settings.quality_uniqueness_weight),
+        "consistency": (consistency, settings.quality_consistency_weight),
+        "validity": (validity, settings.quality_validity_weight),
+    }
+    if integrity_pct is not None:
+        dimensions["integrity"] = (integrity_pct, settings.quality_integrity_weight)
+    total_weight = sum(weight for _, weight in dimensions.values()) or 1
+    score = round(sum(value * weight for value, weight in dimensions.values()) / total_weight, 1)
+    score = max(0.0, min(100.0, score))
+    classification = ("Crítica" if no_structure else "Excelente" if score >= settings.quality_excellent_threshold
+                      else "Boa" if score >= settings.quality_good_threshold
+                      else "Atenção" if score >= settings.quality_attention_threshold else "Crítica")
+    alerts: list[dict[str, str | int | float]] = []
+    if null_count:
+        alerts.append({"severity": "information", "count": null_count,
+                       "message": f"{null_count} valores ausentes ({100 - completeness:.1f}%); avalie se a ausência é esperada para estas colunas."})
+    if duplicate_rows:
+        alerts.append({"severity": "attention", "count": duplicate_rows, "message": f"{duplicate_rows} linhas repetidas foram encontradas."})
+    if invalid_count:
+        alerts.append({"severity": "critical", "count": invalid_count, "message": f"{invalid_count} valores não correspondem ao tipo inferido."})
+    if inconsistent_columns:
+        alerts.append({"severity": "attention", "count": inconsistent_columns,
+                       "message": f"{inconsistent_columns} colunas apresentam mistura de tipos ou valores incompatíveis."})
+    if integrity_pct is not None and integrity_pct < 95:
+        alerts.append({"severity": "attention", "count": round(100 - integrity_pct, 1),
+                       "message": f"Candidatos a relacionamento apresentam {100 - integrity_pct:.1f}% de valores sem correspondência estimada."})
+    if not alerts and not no_structure:
+        alerts.append({"severity": "ok", "count": 0, "message": "Nenhum alerta básico foi identificado pelas regras atuais."})
+    if no_structure:
+        alerts.append({"severity": "critical", "count": 0, "message": "A tabela não possui estrutura de dados para avaliação."})
+    return QualityAnalysis(score=score, classification=classification, completeness_pct=round(completeness, 1),
+                           uniqueness_pct=round(uniqueness, 1), consistency_pct=round(consistency, 1),
+                           validity_pct=round(validity, 1), integrity_pct=round(integrity_pct, 1) if integrity_pct is not None else None,
+                           integrity_assessed=integrity_pct is not None, alerts=alerts)
+
+
+def analyze_file(
+    filename: str,
+    file_type: str,
+    content: bytes,
+    csv_encoding: str | None = None,
+    csv_delimiter: str = "auto",
+    decimal_separator: str = "auto",
+    header_mode: str = "auto",
+    relationship_frames: dict[str, pd.DataFrame] | None = None,
+    relationship_budget: list[int] | None = None,
+    relationship_prefix: str = "",
+) -> AnalysisReport:
+    started = time.monotonic()
+    frames = read_tables(content, file_type, csv_encoding, csv_delimiter, decimal_separator, header_mode)
+    settings = get_settings()
+    tables: list[TableAnalysis] = []
     warnings: list[str] = []
+    all_anomalies: list[Anomaly] = []
+    total_nulls = total_invalid = total_duplicates = total_rows = total_profiled_rows = total_profiled_columns = total_profiled_cells = 0
+
     for table_name, frame in frames.items():
-        frame.columns = [str(column).strip() or f"Coluna {index + 1}" for index, column in enumerate(frame.columns)]
-        if frame.columns.duplicated().any():
-            counts: dict[str, int] = {}
-            columns = []
-            for column in frame.columns:
-                counts[column] = counts.get(column, 0) + 1
-                columns.append(column if counts[column] == 1 else f"{column} ({counts[column]})")
-            frame.columns = columns
-        total_rows = len(frame)
-        columns: list[ColumnAnalysis] = []
+        if time.monotonic() - started > settings.analysis_timeout_seconds:
+            raise AnalysisError("A análise excedeu o tempo máximo configurado.")
+        metadata = dict(frame.attrs)
+        if len(frame.columns) > settings.max_columns_to_analyze:
+            frame = frame.iloc[:, :settings.max_columns_to_analyze]
+        original_column_names = list(frame.columns)
+        normalized_names = [str(column).strip() or f"Coluna {index + 1}" for index, column in enumerate(original_column_names)]
+        if len(set(normalized_names)) != len(normalized_names):
+            repeated: dict[str, int] = {}
+            normalized_names = []
+            for column in original_column_names:
+                label = str(column).strip() or f"Coluna {len(normalized_names) + 1}"
+                repeated[label] = repeated.get(label, 0) + 1
+                normalized_names.append(label if repeated[label] == 1 else f"{label} ({repeated[label]})")
+        frame.columns = normalized_names
+        rows_analyzed = len(frame)
+        rows_total = int(metadata.get("total_rows", rows_analyzed))
+        sampled = bool(metadata.get("sampled", rows_total > rows_analyzed))
+        columns_total = int(metadata.get("columns_total", len(original_column_names)))
+        empty_row_mask = frame.isna().all(axis=1) if len(frame.columns) else pd.Series(False, index=frame.index)
+        empty_rows = int(empty_row_mask.sum())
+        empty_columns = int(sum(frame[column].isna().all() or frame[column].astype(str).str.strip().eq("").all() for column in frame.columns))
+        duplicate_rows = duplicate_row_count(frame)
+        column_analyses: list[ColumnAnalysis] = []
+        key_candidates: list[dict[str, Any]] = []
+        single_keys: set[str] = set()
+        table_nulls = table_invalid = 0
+
         for column_name in frame.columns:
+            if time.monotonic() - started > settings.analysis_timeout_seconds:
+                raise AnalysisError("A análise excedeu o tempo máximo configurado.")
             series = frame[column_name]
+            count = int(series.count())
             null_count = int(series.isna().sum())
             distinct_count = int(series.nunique(dropna=True))
-            inferred = infer_type(series)
-            frequencies = series.dropna().astype(str).value_counts().head(settings.max_category_display)
-            columns.append(ColumnAnalysis(
-                name=str(column_name), inferred_type=inferred, null_count=null_count,
-                null_pct=round(null_count / total_rows * 100, 2) if total_rows else 0,
-                distinct_count=distinct_count,
-                distinct_pct=round(distinct_count / total_rows * 100, 2) if total_rows else 0,
-                duplicate_count=max(0, int(series.count()) - distinct_count),
-                empty=series.isna().all() or (series.dtype == object and series.fillna("").astype(str).str.strip().eq("").all()),
-                key_candidate=total_rows > 0 and null_count == 0 and distinct_count == total_rows,
-                inconsistent_values=inconsistent_value_count(series, inferred),
-                invalid_dates=invalid_date_count(series, inferred),
-                statistics=statistics(series, inferred),
-                top_values=[{"value": value, "count": int(count)} for value, count in frequencies.items()],
-            ))
-        if total_rows > 500_000:
-            warnings.append(f"A tabela '{table_name}' contém muitas linhas; esta versão processa a tabela integralmente em memória.")
-        preview = [{str(k): _safe(v) for k, v in row.items()} for row in frame.head(settings.max_rows_to_preview).to_dict(orient="records")]
-        tables.append(TableAnalysis(name=table_name, rows=total_rows, columns=len(frame.columns),
-                                    duplicate_rows=duplicate_row_count(frame), preview=preview, column_analyses=columns))
+            null_pct = round(null_count / rows_analyzed * 100, 2) if rows_analyzed else 0.0
+            distinct_pct = round(distinct_count / max(1, count) * 100, 2) if count else 0.0
+            inferred = infer_type(series, str(column_name))
+            role, role_confidence = semantic_role(series, str(column_name), inferred)
+            invalid_count = inconsistent_value_count(series, inferred)
+            confidence = type_confidence(series, inferred)
+            private_reason = sensitive_reason(str(column_name), series)
+            candidate, key_confidence, key_reasons = _key_info(str(column_name), 100 - null_pct, distinct_pct, sampled)
+            null_label = null_band(null_pct)
+            anomalies = [] if private_reason else numeric_anomalies(series, inferred, str(column_name))
+            column_stats = {} if private_reason else statistics(series, inferred)
+            zero_count = int(column_stats.get("zero_count", 0))
+            negative_count = int(column_stats.get("negative_count", 0))
+            # Category labels and cell examples are intentionally omitted from the report.
+            frequencies = series.dropna().astype(str).value_counts()
+            top_values = [{"count": int(freq), "percent": round(float(freq / max(1, count) * 100), 2)}
+                          for freq in frequencies.head(3).tolist()]
+            column = ColumnAnalysis(
+                name=str(column_name), original_type=str(series.dtype), physical_type=physical_type(series), inferred_type=inferred,
+                semantic_role=role, semantic_role_confidence=role_confidence,
+                confidence=confidence, type_reason=type_reason(series, str(column_name), inferred),
+                sensitive=bool(private_reason), sensitivity_reason=private_reason,
+                value_count=count, null_count=null_count, null_pct=null_pct,
+                completeness_pct=round(100 - null_pct, 2), distinct_count=distinct_count,
+                distinct_pct=distinct_pct, cardinality=_cardinality(distinct_count, count),
+                duplicate_count=max(0, count - distinct_count), empty=bool(series.isna().all() or series.astype(str).str.strip().eq("").all()),
+                key_candidate=candidate, key_confidence=key_confidence, key_reasons=key_reasons,
+                inconsistent_values=invalid_count, invalid_dates=invalid_date_count(series, inferred),
+                zero_count=zero_count if not private_reason else None,
+                negative_count=negative_count if not private_reason else None,
+                statistics=StatisticsAnalysis(**column_stats),
+                top_values=[] if private_reason else top_values, null_classification=null_label,
+                anomalies=anomalies,
+            )
+            column_analyses.append(column)
+            table_nulls += null_count
+            table_invalid += invalid_count
+            if candidate:
+                single_keys.add(column_name)
+                key_candidates.append({"columns": [column_name], "confidence": key_confidence,
+                                       "uniqueness_pct": distinct_pct, "completeness_pct": 100 - null_pct,
+                                       "reasons": key_reasons})
+            all_anomalies.extend(anomalies)
+
+        key_candidates.extend(_composite_keys(frame, single_keys, sampled))
+        key_candidates = key_candidates[:settings.max_key_candidates]
+        inconsistent_columns = sum(column.inconsistent_values > 0 for column in column_analyses)
+        quality = _quality(rows_analyzed, len(frame.columns), table_nulls, table_invalid, duplicate_rows,
+                           rows_analyzed * len(frame.columns), inconsistent_columns)
+        kind, kind_confidence, kind_reason = _table_kind(table_name, frame)
+        if sampled:
+            warnings.append(f"A tabela '{table_name}' foi amostrada: {rows_analyzed:,} de {rows_total:,} linhas foram perfiladas.")
+        if rows_total == 0 or columns_total == 0:
+            warnings.append(f"A tabela '{table_name}' não contém linhas ou colunas para perfilar.")
+        if columns_total > len(frame.columns):
+            warnings.append(f"A tabela '{table_name}' tem {columns_total} colunas; somente {len(frame.columns)} foram perfiladas.")
+        import_settings = metadata.get("import_settings", {})
+        if metadata.get("tables_total", len(frames)) > settings.max_tables_to_analyze:
+            warnings.append(f"O arquivo contém {metadata['tables_total']} abas; somente {settings.max_tables_to_analyze} foram analisadas.")
+        if import_settings.get("delimiter_ambiguous"):
+            warnings.append(f"O delimitador de '{table_name}' não foi identificado com segurança; foi usado {repr(import_settings.get('delimiter'))}.")
+        if import_settings.get("header_ambiguous") and header_mode == "auto":
+            warnings.append(f"A presença de cabeçalho em '{table_name}' é ambígua; a primeira linha foi tratada como dados e foram usados nomes genéricos para evitar expor possíveis valores no relatório.")
+        tables.append(TableAnalysis(
+            name=table_name, rows=rows_total, rows_analyzed=rows_analyzed, sampled=sampled,
+            columns=columns_total, columns_analyzed=len(frame.columns), empty_rows=empty_rows,
+            empty_columns=empty_columns, duplicate_rows=duplicate_rows,
+            table_type=kind, table_type_confidence=kind_confidence, table_type_reason=kind_reason,
+            key_candidates=key_candidates, quality=quality, column_analyses=column_analyses,
+        ))
+        total_nulls += table_nulls
+        total_invalid += table_invalid
+        total_duplicates += duplicate_rows
+        total_rows += rows_total
+        total_profiled_rows += rows_analyzed
+        total_profiled_columns += len(frame.columns)
+        total_profiled_cells += rows_analyzed * len(frame.columns)
+
+    if relationship_frames is not None and relationship_budget is not None and file_type == "csv":
+        tables_by_name = {table.name: table for table in tables}
+        for table_name, frame in frames.items():
+            available = relationship_budget[0]
+            sensitive_columns = {column.name for column in tables_by_name.get(table_name, tables[0]).column_analyses
+                                 if column.sensitive} if tables else set()
+            eligible_columns = [column for column in frame.columns if str(column) not in sensitive_columns]
+            column_count = min(len(eligible_columns), settings.max_columns_to_analyze, available)
+            if available <= 0 or column_count == 0:
+                continue
+            selected_columns = eligible_columns[:column_count]
+            row_count = min(len(frame), settings.max_relationship_value_rows, max(1, available // column_count))
+            if row_count == 0:
+                continue
+            relation_frame = frame.loc[:, selected_columns].iloc[:row_count].copy()
+            relation_frame.attrs["sampled"] = bool(frame.attrs.get("sampled", False) or row_count < len(frame))
+            relationship_frames[f"{relationship_prefix}::{table_name}"] = relation_frame
+            relationship_budget[0] -= row_count * column_count
+
     relationships = suggest_relationships(frames, tables)
-    return FileAnalysis(filename=filename, file_type=file_type, file_size_bytes=len(content), tables=tables,
-                        relationships=relationships, warnings=warnings)
+    integrity_pct = (sum(relation.coverage_pct for relation in relationships) / len(relationships)) if relationships else None
+    for table in tables:
+        table_relations = [relation for relation in relationships if table.name in {relation.source_table, relation.target_table}]
+        table_integrity = sum(relation.coverage_pct for relation in table_relations) / len(table_relations) if table_relations else None
+        table_nulls = sum(column.null_count for column in table.column_analyses)
+        table_invalid = sum(column.inconsistent_values for column in table.column_analyses)
+        table_inconsistent_columns = sum(column.inconsistent_values > 0 for column in table.column_analyses)
+        table.quality = _quality(table.rows_analyzed, table.columns_analyzed, table_nulls, table_invalid,
+                                 table.duplicate_rows, table.rows_analyzed * table.columns_analyzed,
+                                 table_inconsistent_columns, table_integrity)
+    overall_quality = _quality(total_profiled_rows, max(1, total_profiled_columns), total_nulls,
+                               total_invalid, total_duplicates, total_profiled_cells,
+                               sum(column.inconsistent_values > 0 for table in tables for column in table.column_analyses),
+                               integrity_pct)
+    csv_settings = frames[next(iter(frames))].attrs.get("import_settings", {}) if frames else {}
+    actual_settings = {
+        "csv_encoding": csv_encoding, "csv_delimiter": csv_settings.get("delimiter", csv_delimiter),
+        "decimal_separator": csv_settings.get("decimal_separator", decimal_separator),
+        "header_mode": header_mode, "max_rows_to_analyze": settings.max_rows_to_analyze,
+        "max_columns_to_analyze": settings.max_columns_to_analyze,
+        "max_cells_to_analyze": settings.max_cells_to_analyze,
+        "max_tables_to_analyze": settings.max_tables_to_analyze,
+        "max_relationship_value_rows": settings.max_relationship_value_rows,
+        "max_batch_relationship_cells": settings.max_batch_relationship_cells,
+        "sample_size": settings.sample_size, "sampling_enabled": settings.enable_sampling,
+        "analysis_timeout_seconds": settings.analysis_timeout_seconds,
+        "null_thresholds_pct": {"attention": settings.null_attention_threshold_pct,
+                                 "moderate": settings.null_moderate_threshold_pct,
+                                 "critical_above": settings.null_critical_threshold_pct},
+        "quality_thresholds": {"excellent": settings.quality_excellent_threshold,
+                               "good": settings.quality_good_threshold,
+                               "attention": settings.quality_attention_threshold},
+        "quality_weights": {"completeness": settings.quality_completeness_weight,
+                            "uniqueness": settings.quality_uniqueness_weight,
+                            "consistency": settings.quality_consistency_weight,
+                            "validity": settings.quality_validity_weight,
+                            "integrity": settings.quality_integrity_weight},
+        "percentiles": list(settings.percentiles),
+        "statistics_sampled": any(table.sampled for table in tables),
+    }
+    safety_warnings = ["O arquivo foi lido localmente; macros não foram executadas e fórmulas usam apenas valores em cache."] if file_type == "xlsx" else ["O arquivo foi lido localmente como texto; nenhum conteúdo foi executado."]
+    return AnalysisReport(
+        analysis_id=str(uuid.uuid4()), analyzed_at=datetime.now().astimezone(),
+        processing_time_ms=int((time.monotonic() - started) * 1000), filename=filename,
+        file_type=file_type, file_size_bytes=len(content), file_sha256=sha256(content).hexdigest(),
+        status="completed", settings=actual_settings, security_warnings=safety_warnings,
+        tables=tables, relationships=relationships, anomalies=all_anomalies,
+        quality=overall_quality, warnings=list(dict.fromkeys(warnings)),
+    )
+
+
+def _cardinality(distinct: int, count: int) -> str:
+    if count == 0 or distinct <= 1:
+        return "constante"
+    ratio = distinct / count
+    return "baixa" if ratio <= 0.05 else "média" if ratio <= 0.5 else "alta"

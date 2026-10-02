@@ -10,19 +10,32 @@
 <body>
   <header class="topbar"><a class="brand" href="/" aria-label="BI Swiss Knife início"><span class="brand-icon">⌁</span> BI SWISS KNIFE</a><span class="local-badge"><i></i> ANÁLISE LOCAL</span></header>
   <main>
-    <section class="hero"><div class="eyebrow">FERRAMENTA DE DIAGNÓSTICO DE DADOS <span>·</span> V0.2.0</div><h1>Conheça seus dados<br><em>antes de construir.</em></h1><p>Inspecione planilhas e arquivos CSV. Seus dados permanecem neste computador.</p></section>
+    <section class="hero"><div class="eyebrow">FERRAMENTA DE DIAGNÓSTICO DE DADOS <span>·</span> V0.3.0</div><h1>Conheça seus dados<br><em>antes de construir.</em></h1><p>Inspecione planilhas e arquivos CSV. Seus dados permanecem neste computador.</p></section>
     <section class="upload-card" id="drop-zone">
       <input id="file-input" type="file" accept=".xlsx,.csv" multiple hidden>
       <input id="folder-input" type="file" accept=".xlsx,.csv" webkitdirectory directory multiple hidden>
       <div class="upload-icon">↥</div><h2>Solte arquivos ou uma pasta aqui</h2><p>ou escolha no computador</p>
       <div class="picker-actions"><button class="text-button" id="browse">Escolher arquivos</button><button class="text-button" id="browse-folder">Escolher pasta</button></div>
       <div class="formats"><span>.XLSX</span><span>.CSV</span><span>ATÉ 100 MB POR ARQUIVO</span><span>ATÉ 50 ARQUIVOS</span></div>
+      <details class="import-options"><summary>Opções de importação CSV</summary><div class="option-grid">
+        <label>Delimitador<select id="csv-delimiter"><option value="auto">Detectar automaticamente</option><option value=",">Vírgula (,)</option><option value=";">Ponto e vírgula (;)</option><option value="tab">Tabulação</option><option value="|">Barra vertical (|)</option></select></label>
+        <label>Separador decimal<select id="decimal-separator"><option value="auto">Detectar automaticamente</option><option value=".">Ponto (.)</option><option value=",">Vírgula (,)</option></select></label>
+        <label>Cabeçalho<select id="header-mode"><option value="auto">Detectar automaticamente</option><option value="true">Primeira linha tem cabeçalho</option><option value="false">Sem cabeçalho</option></select></label>
+      </div></details>
       <p class="privacy-note"><span>▣</span> Processado localmente · Sem uploads externos</p>
       <div id="file-name" class="file-name" hidden></div>
       <button id="analyze-button" class="primary-button" disabled>Analisar arquivos <span>→</span></button>
     </section>
     <div id="status" class="status" role="status" aria-live="polite"></div>
     <section id="results" hidden></section>
+    <dialog id="header-choice" aria-labelledby="header-choice-title">
+      <form method="dialog">
+        <h2 id="header-choice-title">Confirme a primeira linha</h2>
+        <p id="header-choice-file"></p>
+        <p>Não foi possível distinguir com segurança cabeçalho e dados. Como deseja interpretar a primeira linha?</p>
+        <div class="picker-actions"><button class="secondary-button" value="header">Primeira linha é cabeçalho</button><button class="secondary-button" value="data">Primeira linha é dado</button><button class="text-button" value="generic">Manter nomes genéricos</button></div>
+      </form>
+    </dialog>
     <footer>BI SWISS KNIFE <span>•</span> INSPEÇÃO LOCAL DE DADOS</footer>
   </main>
   <script src="/static/js/app.js" defer></script>

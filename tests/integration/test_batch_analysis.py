@@ -13,7 +13,7 @@ def test_batch_analyzes_multiple_files_and_reports_bad_files_individually():
         UploadFile(filename="macro.xlsm", file=BytesIO(b"conteudo nao permitido")),
     ]
 
-    result = asyncio.run(analyze_batch(uploads))
+    result = asyncio.run(analyze_batch(uploads, "auto", "auto", "auto"))
 
     assert result["file_count"] == 3
     assert result["results"][0]["analysis"]["filename"] == "vendas/sul.csv"

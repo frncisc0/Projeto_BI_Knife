@@ -1,10 +1,27 @@
 import csv
 import io
 import zipfile
+import xml.etree.ElementTree as ElementTree
 from pathlib import PurePath
 
 from app.core.config import get_settings
 from app.core.exceptions import FileValidationError
+
+
+def _reject_unsafe_xlsx_xml(archive: zipfile.ZipFile, names: list[str]) -> None:
+    """Reject DTD/entity declarations before an XLSX XML parser sees them."""
+    markers = (b"<!DOCTYPE", b"<!ENTITY")
+    for name in names:
+        if not name.casefold().endswith((".xml", ".rels")):
+            continue
+        carry = b""
+        with archive.open(name) as xml_stream:
+            while chunk := xml_stream.read(64 * 1024):
+                window = carry + chunk
+                upper_window = window.upper()
+                if b"\x00" in window or any(marker in upper_window for marker in markers):
+                    raise FileValidationError("O XLSX contém declarações XML não permitidas e não será processado.")
+                carry = window[-16:]
 
 
 def validate_filename(filename: str | None) -> tuple[str, str]:
@@ -42,8 +59,27 @@ def validate_upload(filename: str | None, content: bytes) -> tuple[str, str, str
                 names = archive.namelist()
                 if "[Content_Types].xml" not in names or "xl/workbook.xml" not in names:
                     raise FileValidationError("O arquivo ZIP enviado não possui a estrutura de um XLSX.")
-                if any(name.startswith("xl/externalLinks/") for name in names):
-                    raise FileValidationError("Arquivos XLSX com vínculos externos não são aceitos.")
+                dangerous_features = (
+                    "xl/vbaProject.bin", "xl/connections.xml", "xl/externalLinks/", "xl/embeddings/",
+                    "xl/activeX/", "xl/ctrlProps/",
+                )
+                if any(name in names or any(item.startswith(name) for item in names) for name in dangerous_features):
+                    raise FileValidationError("O XLSX contém macros, conexões ou conteúdo incorporado potencialmente ativo e não será processado.")
+                uncompressed_limit = get_settings().max_xlsx_uncompressed_mb * 1024 * 1024
+                if sum(item.file_size for item in archive.infolist()) > uncompressed_limit:
+                    raise FileValidationError(f"O XLSX excede o limite expandido de {get_settings().max_xlsx_uncompressed_mb} MB.")
+                _reject_unsafe_xlsx_xml(archive, names)
+                for name in names:
+                    if name.endswith(".rels"):
+                        info = archive.getinfo(name)
+                        if info.file_size > 1024 * 1024:
+                            raise FileValidationError("O XLSX contém metadados externos inesperadamente grandes.")
+                        try:
+                            relationship_xml = ElementTree.fromstring(archive.read(name))
+                        except ElementTree.ParseError as exc:
+                            raise FileValidationError("O arquivo XLSX contém relacionamentos inválidos.") from exc
+                        if any(element.attrib.get("TargetMode", "").casefold() == "external" for element in relationship_xml.iter()):
+                            raise FileValidationError("O XLSX contém referências externas e não será processado.")
         except zipfile.BadZipFile as exc:
             raise FileValidationError("O arquivo XLSX está corrompido.") from exc
         return safe_name, "xlsx", None
