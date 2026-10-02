@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError, FileValidationError
 from app.analyzers.relationship_analyzer import suggest_relationships
-from app.security.file_validation import display_filename, validate_upload
+from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.report_service import report_payload
 
@@ -45,8 +45,10 @@ async def analyze(
                 raise FileValidationError(f"O arquivo excede o limite de {get_settings().max_file_size_mb} MB.")
             chunks.append(chunk)
         content = b"".join(chunks)
-        filename, file_type, encoding = validate_upload(upload.filename, content)
-        return report_payload(analyze_file(filename, file_type, content, encoding, csv_delimiter, decimal_separator, header_mode))
+        chunks.clear()
+        filename, file_type, encoding, security = validate_upload_detailed(upload.filename, content)
+        return report_payload(analyze_file(filename, file_type, content, encoding, csv_delimiter,
+                                           decimal_separator, header_mode, security_metadata=security))
     except FileValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AnalysisError as exc:
@@ -147,12 +149,13 @@ async def analyze_batch(
             try:
                 content = await _read_upload(upload, file_limit, batch_limit - batch_bytes, settings.max_batch_size_mb)
                 batch_bytes += len(content)
-                safe_name, file_type, encoding = validate_upload(upload.filename, content)
+                safe_name, file_type, encoding, security = validate_upload_detailed(upload.filename, content)
                 analysis = analyze_file(filename or safe_name, file_type, content, encoding,
                                         csv_delimiter, decimal_separator, header_mode,
                                         relationship_frames=relationship_frames,
                                         relationship_budget=file_relationship_budget,
-                                        relationship_prefix=f"{upload_index}:{filename or safe_name}")
+                                        relationship_prefix=f"{upload_index}:{filename or safe_name}",
+                                        security_metadata=security)
                 results.append({"filename": filename or safe_name, "analysis": report_payload(analysis), "error": None})
             except FileValidationError as exc:
                 results.append({"filename": filename, "analysis": None, "error": str(exc)})

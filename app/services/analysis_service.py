@@ -19,7 +19,8 @@ from app.analyzers.schema_analyzer import infer_type, physical_type, sensitive_r
 from app.analyzers.statistics_analyzer import statistics
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError
-from app.models.analysis_models import Anomaly, AnalysisReport, ColumnAnalysis, QualityAnalysis, StatisticsAnalysis, TableAnalysis
+from app.models.analysis_models import Anomaly, AnalysisReport, ColumnAnalysis, FileSecurityAnalysis, QualityAnalysis, StatisticsAnalysis, TableAnalysis
+from app.security.file_validation import inspect_xlsx_package
 
 
 KEY_NAME_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número")
@@ -157,9 +158,13 @@ def analyze_file(
     relationship_frames: dict[str, pd.DataFrame] | None = None,
     relationship_budget: list[int] | None = None,
     relationship_prefix: str = "",
+    security_metadata: dict[str, Any] | None = None,
 ) -> AnalysisReport:
     started = time.monotonic()
-    frames = read_tables(content, file_type, csv_encoding, csv_delimiter, decimal_separator, header_mode)
+    if file_type in {"xlsx", "xlsm"} and security_metadata is None:
+        security_metadata = inspect_xlsx_package(content)
+    frames = read_tables(content, file_type, csv_encoding, csv_delimiter, decimal_separator, header_mode,
+                         security_metadata=security_metadata)
     settings = get_settings()
     tables: list[TableAnalysis] = []
     warnings: list[str] = []
@@ -170,6 +175,18 @@ def analyze_file(
         if time.monotonic() - started > settings.analysis_timeout_seconds:
             raise AnalysisError("A análise excedeu o tempo máximo configurado.")
         metadata = dict(frame.attrs)
+        if metadata.get("worksheet_status") == "failed":
+            reason = str(metadata.get("worksheet_error", "Esta aba não pôde ser lida."))
+            tables.append(TableAnalysis(
+                name=table_name, status="failed", error_message=reason,
+                rows=0, rows_analyzed=0, sampled=False, columns=0, columns_analyzed=0,
+                empty_rows=0, empty_columns=0, duplicate_rows=0,
+                table_type="não analisada", table_type_confidence="low",
+                table_type_reason="A leitura desta aba falhou; nenhuma conclusão estrutural foi produzida.",
+                key_candidates=[], quality=_quality(0, 0, 0, 0, 0), column_analyses=[],
+            ))
+            warnings.append(f"A aba '{table_name}' não foi processada: {reason}")
+            continue
         if len(frame.columns) > settings.max_columns_to_analyze:
             frame = frame.iloc[:, :settings.max_columns_to_analyze]
         original_column_names = list(frame.columns)
@@ -266,7 +283,9 @@ def analyze_file(
         if import_settings.get("header_ambiguous") and header_mode == "auto":
             warnings.append(f"A presença de cabeçalho em '{table_name}' é ambígua; a primeira linha foi tratada como dados e foram usados nomes genéricos para evitar expor possíveis valores no relatório.")
         tables.append(TableAnalysis(
-            name=table_name, rows=rows_total, rows_analyzed=rows_analyzed, sampled=sampled,
+            name=table_name,
+            header_row_used=metadata.get("header_row_used", 1 if import_settings.get("header") else None),
+            rows=rows_total, rows_analyzed=rows_analyzed, sampled=sampled,
             columns=columns_total, columns_analyzed=len(frame.columns), empty_rows=empty_rows,
             empty_columns=empty_columns, duplicate_rows=duplicate_rows,
             table_type=kind, table_type_confidence=kind_confidence, table_type_reason=kind_reason,
@@ -314,6 +333,10 @@ def analyze_file(
                                total_invalid, total_duplicates, total_profiled_cells,
                                sum(column.inconsistent_values > 0 for table in tables for column in table.column_analyses),
                                integrity_pct)
+    failed_tables = sum(table.status == "failed" for table in tables)
+    successful_tables = sum(table.status == "completed" for table in tables)
+    tables_omitted = any(int(frame.attrs.get("tables_total", len(frames))) > len(frames) for frame in frames.values())
+    report_status = "failed" if not successful_tables else "partial" if failed_tables or tables_omitted else "completed"
     csv_settings = frames[next(iter(frames))].attrs.get("import_settings", {}) if frames else {}
     actual_settings = {
         "csv_encoding": csv_encoding, "csv_delimiter": csv_settings.get("delimiter", csv_delimiter),
@@ -321,6 +344,7 @@ def analyze_file(
         "header_mode": header_mode, "max_rows_to_analyze": settings.max_rows_to_analyze,
         "max_columns_to_analyze": settings.max_columns_to_analyze,
         "max_cells_to_analyze": settings.max_cells_to_analyze,
+        "max_xlsx_profile_cells": settings.max_xlsx_profile_cells,
         "max_tables_to_analyze": settings.max_tables_to_analyze,
         "max_relationship_value_rows": settings.max_relationship_value_rows,
         "max_batch_relationship_cells": settings.max_batch_relationship_cells,
@@ -340,12 +364,36 @@ def analyze_file(
         "percentiles": list(settings.percentiles),
         "statistics_sampled": any(table.sampled for table in tables),
     }
-    safety_warnings = ["O arquivo foi lido localmente; macros não foram executadas e fórmulas usam apenas valores em cache."] if file_type == "xlsx" else ["O arquivo foi lido localmente como texto; nenhum conteúdo foi executado."]
+    if file_type in {"xlsx", "xlsm"}:
+        actual_settings["worksheets_analyzed"] = len(frames)
+        actual_settings["worksheets_total"] = max(
+            (int(frame.attrs.get("tables_total", len(frames))) for frame in frames.values()), default=0
+        )
+    file_security = None
+    if file_type in {"xlsx", "xlsm"}:
+        security_metadata = security_metadata or {}
+        active_types = list(security_metadata.get("active_content_types", []))
+        file_security = FileSecurityAnalysis(
+            active_content_detected=bool(security_metadata.get("active_content_detected", False)),
+            active_content_types=active_types,
+            external_relationships_detected=bool(security_metadata.get("external_relationships_detected", False)),
+            external_relationship_count=int(security_metadata.get("external_relationship_count", 0)),
+            formulas_action="cached_values_only",
+        )
+        safety_warnings = ["As abas legíveis foram abertas em modo somente leitura; macros, fórmulas e objetos não foram executados."]
+        if active_types:
+            safety_warnings.append(f"Conteúdo potencialmente ativo detectado ({', '.join(active_types)}); não foi executado.")
+        if file_security.external_relationships_detected:
+            safety_warnings.append("Relações externas foram detectadas, mas não foram seguidas nem atualizadas.")
+        safety_warnings.append("Fórmulas não são recalculadas; somente valores armazenados em cache podem ser lidos.")
+    else:
+        safety_warnings = ["O arquivo foi lido localmente como texto; nenhum conteúdo foi executado."]
     return AnalysisReport(
         analysis_id=str(uuid.uuid4()), analyzed_at=datetime.now().astimezone(),
         processing_time_ms=int((time.monotonic() - started) * 1000), filename=filename,
         file_type=file_type, file_size_bytes=len(content), file_sha256=sha256(content).hexdigest(),
-        status="completed", settings=actual_settings, security_warnings=safety_warnings,
+        status=report_status, settings=actual_settings, security_warnings=safety_warnings,
+        security=file_security,
         tables=tables, relationships=relationships, anomalies=all_anomalies,
         quality=overall_quality, warnings=list(dict.fromkeys(warnings)),
     )

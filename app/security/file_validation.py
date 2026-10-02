@@ -31,7 +31,7 @@ def validate_filename(filename: str | None) -> tuple[str, str]:
     safe_name = PurePath(filename.replace("\\", "/")).name
     extension = PurePath(safe_name).suffix.lower()
     if extension not in get_settings().allowed_extensions:
-        raise FileValidationError("Formato não permitido. Envie um arquivo .xlsx ou .csv.")
+        raise FileValidationError("Formato não permitido. Envie um arquivo .xlsx, .xlsm ou .csv.")
     return safe_name, extension
 
 
@@ -44,45 +44,68 @@ def display_filename(filename: str | None) -> str:
     return "/".join(parts) or "arquivo"
 
 
-def validate_upload(filename: str | None, content: bytes) -> tuple[str, str, str | None]:
+def inspect_xlsx_package(content: bytes) -> dict[str, object]:
+    """Validate an OOXML package and report detectable active/external features."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            names = archive.namelist()
+            if "[Content_Types].xml" not in names or "xl/workbook.xml" not in names:
+                raise FileValidationError("O arquivo ZIP enviado não possui a estrutura de uma planilha Excel.")
+            uncompressed_limit = get_settings().max_xlsx_uncompressed_mb * 1024 * 1024
+            if sum(item.file_size for item in archive.infolist()) > uncompressed_limit:
+                raise FileValidationError(f"O XLSX excede o limite expandido de {get_settings().max_xlsx_uncompressed_mb} MB.")
+            _reject_unsafe_xlsx_xml(archive, names)
+
+            lowered = [name.casefold() for name in names]
+            content_types: set[str] = set()
+            if any(name.endswith("/vbaproject.bin") or name == "xl/vbaproject.bin" for name in lowered):
+                content_types.add("macro")
+            if "xl/connections.xml" in lowered:
+                content_types.add("connection_definition")
+            if any(name.startswith("xl/externallinks/") for name in lowered):
+                content_types.add("external_link")
+            if any(name.startswith("xl/embeddings/") for name in lowered):
+                content_types.add("embedded_object")
+            if any(name.startswith("xl/activex/") for name in lowered):
+                content_types.add("activeX_control")
+
+            external_relationship_count = 0
+            for name in names:
+                if not name.casefold().endswith(".rels"):
+                    continue
+                info = archive.getinfo(name)
+                if info.file_size > 1024 * 1024:
+                    raise FileValidationError("O XLSX contém metadados de relacionamento inesperadamente grandes.")
+                try:
+                    relationship_xml = ElementTree.fromstring(archive.read(name))
+                except ElementTree.ParseError as exc:
+                    raise FileValidationError("O arquivo Excel contém relacionamentos inválidos.") from exc
+                external_relationship_count += sum(
+                    element.attrib.get("TargetMode", "").casefold() == "external"
+                    for element in relationship_xml.iter()
+                )
+            if external_relationship_count:
+                content_types.add("external_relationship")
+            return {
+                "active_content_detected": bool(content_types),
+                "active_content_types": sorted(content_types),
+                "external_relationships_detected": external_relationship_count > 0,
+                "external_relationship_count": external_relationship_count,
+            }
+    except zipfile.BadZipFile as exc:
+        raise FileValidationError("O conteúdo não parece ser um arquivo Excel Open XML válido ou está corrompido.") from exc
+
+
+def validate_upload_detailed(filename: str | None, content: bytes) -> tuple[str, str, str | None, dict[str, object] | None]:
     safe_name, extension = validate_filename(filename)
     settings = get_settings()
     if not content:
         raise FileValidationError("O arquivo está vazio.")
     if len(content) > settings.max_file_size_mb * 1024 * 1024:
         raise FileValidationError(f"O arquivo excede o limite de {settings.max_file_size_mb} MB.")
-    if extension == ".xlsx":
-        if not zipfile.is_zipfile(io.BytesIO(content)):
-            raise FileValidationError("O conteúdo não parece ser um arquivo XLSX válido.")
-        try:
-            with zipfile.ZipFile(io.BytesIO(content)) as archive:
-                names = archive.namelist()
-                if "[Content_Types].xml" not in names or "xl/workbook.xml" not in names:
-                    raise FileValidationError("O arquivo ZIP enviado não possui a estrutura de um XLSX.")
-                dangerous_features = (
-                    "xl/vbaProject.bin", "xl/connections.xml", "xl/externalLinks/", "xl/embeddings/",
-                    "xl/activeX/", "xl/ctrlProps/",
-                )
-                if any(name in names or any(item.startswith(name) for item in names) for name in dangerous_features):
-                    raise FileValidationError("O XLSX contém macros, conexões ou conteúdo incorporado potencialmente ativo e não será processado.")
-                uncompressed_limit = get_settings().max_xlsx_uncompressed_mb * 1024 * 1024
-                if sum(item.file_size for item in archive.infolist()) > uncompressed_limit:
-                    raise FileValidationError(f"O XLSX excede o limite expandido de {get_settings().max_xlsx_uncompressed_mb} MB.")
-                _reject_unsafe_xlsx_xml(archive, names)
-                for name in names:
-                    if name.endswith(".rels"):
-                        info = archive.getinfo(name)
-                        if info.file_size > 1024 * 1024:
-                            raise FileValidationError("O XLSX contém metadados externos inesperadamente grandes.")
-                        try:
-                            relationship_xml = ElementTree.fromstring(archive.read(name))
-                        except ElementTree.ParseError as exc:
-                            raise FileValidationError("O arquivo XLSX contém relacionamentos inválidos.") from exc
-                        if any(element.attrib.get("TargetMode", "").casefold() == "external" for element in relationship_xml.iter()):
-                            raise FileValidationError("O XLSX contém referências externas e não será processado.")
-        except zipfile.BadZipFile as exc:
-            raise FileValidationError("O arquivo XLSX está corrompido.") from exc
-        return safe_name, "xlsx", None
+    if extension in {".xlsx", ".xlsm"}:
+        security = inspect_xlsx_package(content)
+        return safe_name, extension[1:], None, security
     text, encoding = _decode_csv(content)
     try:
         dialect = csv.Sniffer().sniff(text[:65536], delimiters=",;\t|")
@@ -96,7 +119,13 @@ def validate_upload(filename: str | None, content: bytes) -> tuple[str, str, str
             raise FileValidationError("O CSV não contém um cabeçalho válido.")
     except csv.Error as exc:
         raise FileValidationError("Não foi possível ler a estrutura do CSV.") from exc
-    return safe_name, "csv", encoding
+    return safe_name, "csv", encoding, None
+
+
+def validate_upload(filename: str | None, content: bytes) -> tuple[str, str, str | None]:
+    """Compatibility wrapper for callers that need only file type and encoding."""
+    safe_name, file_type, encoding, _ = validate_upload_detailed(filename, content)
+    return safe_name, file_type, encoding
 
 
 def _decode_csv(content: bytes) -> tuple[str, str]:

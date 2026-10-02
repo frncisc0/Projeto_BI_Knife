@@ -20,4 +20,4 @@ def test_batch_analyzes_multiple_files_and_reports_bad_files_individually():
     assert result["results"][0]["analysis"]["tables"][0]["rows"] == 2
     assert result["results"][1]["analysis"]["filename"] == "clientes.csv"
     assert result["results"][2]["analysis"] is None
-    assert ".xlsx ou .csv" in result["results"][2]["error"]
+    assert "Excel Open XML" in result["results"][2]["error"]

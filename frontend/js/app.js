@@ -104,7 +104,7 @@ function setFiles(files) {
   statusEl.className = 'status';
   statusEl.textContent = '';
   resultEl.hidden = true;
-  const valid = files.filter(file => /\.(xlsx|csv)$/i.test(file.name));
+  const valid = files.filter(file => /\.(xlsx|xlsm|csv)$/i.test(file.name));
   const unique = new Map();
   valid.forEach(file => unique.set(`${fileLabel(file)}:${file.size}:${file.lastModified}`, file));
   selectedFiles = [...unique.values()];
@@ -113,7 +113,7 @@ function setFiles(files) {
     selectedFiles = [];
     showStatus(`Selecione no máximo ${maxFiles} arquivos por vez.`, 'error');
   } else if (!selectedFiles.length) {
-    showStatus('Não encontrei arquivos .xlsx ou .csv na seleção.', 'error');
+    showStatus('Não encontrei arquivos .xlsx, .xlsm ou .csv na seleção.', 'error');
   } else if (rejected) {
     showStatus(`${rejected} item(ns) foram ignorados; somente CSV e XLSX são aceitos.`);
   }
@@ -145,7 +145,7 @@ button.addEventListener('click', async () => {
     const payload = await submitBatch(filesToAnalyze, common);
     if (common.header_mode === 'auto') await resolveAmbiguousHeaders(payload, common, filesToAnalyze);
     renderBatch(payload);
-    const succeeded = payload.results.filter(item => item.analysis).length;
+    const succeeded = payload.results.filter(item => item.analysis && item.analysis.status !== 'failed').length;
     const failed = payload.results.length - succeeded;
     downloadReport(JSON.stringify(payload, null, 2), 'application/json', 'bi-swiss-knife-relatorio.json');
     showStatus(failed
@@ -204,15 +204,21 @@ function escapeHtml(value) {
 
 function renderBatch(batch) {
   const successes = batch.results.filter(item => item.analysis);
+  const analyzedCount = successes.filter(item => item.analysis.status !== 'failed').length;
   const totalRows = successes.reduce((sum, item) => sum + item.analysis.tables.reduce((n, table) => n + table.rows, 0), 0);
   const totalColumns = successes.reduce((sum, item) => sum + item.analysis.tables.reduce((n, table) => n + table.columns, 0), 0);
   const issueCount = successes.reduce((sum, item) => sum + item.analysis.tables.reduce((tableSum, table) =>
     tableSum + table.duplicate_rows + table.column_analyses.reduce((columnSum, column) =>
       columnSum + column.inconsistent_values, 0), 0), 0);
-  const fileRows = batch.results.map(item => `<div class="relationship"><b>${escapeHtml(item.filename)}</b> <span class="subtle">${item.analysis ? 'Analisado' : `Erro: ${escapeHtml(item.error)}`}</span></div>`).join('');
+  const fileRows = batch.results.map(item => {
+    const status = item.analysis?.status === 'partial' ? 'Análise parcial'
+      : item.analysis?.status === 'failed' ? 'Falha na análise'
+        : item.analysis ? 'Analisado' : `Erro: ${escapeHtml(item.error)}`;
+    return `<div class="relationship"><b>${escapeHtml(item.filename)}</b> <span class="subtle">${status}</span></div>`;
+  }).join('');
   const details = successes.length ? `<div class="panel"><div class="table-head"><h3>Detalhes do arquivo</h3><select class="table-select" id="file-select">${successes.map((item, i) => `<option value="${i}">${escapeHtml(item.filename)}</option>`).join('')}</select></div><div id="file-details"></div></div>` : '<div class="panel subtle">Nenhum arquivo pôde ser analisado.</div>';
   resultEl.hidden = false;
-  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${successes.length} de ${batch.file_count} arquivo(s) analisado(s)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">HTML</button></div></div>
+  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">HTML</button></div></div>
     <div class="metric-grid"><div class="metric"><label>LINHAS</label><strong>${totalRows.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>COLUNAS</label><strong>${totalColumns.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>ITENS PARA REVISAR</label><strong class="${issueCount ? 'quality-bad' : ''}">${issueCount.toLocaleString('pt-BR')}</strong><span class="subtle">sem contar ausências</span></div></div>
     <div class="panel"><h3>Arquivos selecionados</h3>${fileRows}</div>${details}`;
   resultEl.querySelector('#export-json').addEventListener('click', () => downloadReport(JSON.stringify(batch, null, 2), 'application/json', 'bi-swiss-knife-relatorio.json'));
@@ -257,7 +263,7 @@ function batchCsv(batch) {
 function batchHtml(batch) {
   const rows = batch.results.map(item => {
     const analysis = item.analysis;
-    return `<tr><td>${escapeHtml(item.filename)}</td><td>${analysis ? 'Concluída' : 'Erro'}</td><td>${analysis ? analysis.tables.length : escapeHtml(item.error)}</td><td>${analysis ? escapeHtml(analysis.quality.classification) : '—'}</td></tr>`;
+    return `<tr><td>${escapeHtml(item.filename)}</td><td>${analysis ? (analysis.status === 'partial' ? 'Parcial' : analysis.status === 'failed' ? 'Falha' : 'Concluída') : 'Erro'}</td><td>${analysis ? analysis.tables.length : escapeHtml(item.error)}</td><td>${analysis ? escapeHtml(analysis.quality.classification) : '—'}</td></tr>`;
   }).join('');
   return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Relatório BI Swiss Knife</title><style>body{font:15px system-ui;max-width:1000px;margin:40px auto;color:#17231b}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #ddd}th{background:#eef5ef}</style><h1>Diagnóstico BI Swiss Knife</h1><p>Relatório local; não contém prévia de linhas nem rótulos de categorias.</p><table><thead><tr><th>Arquivo</th><th>Status</th><th>Abas</th><th>Qualidade</th></tr></thead><tbody>${rows}</tbody></table></html>`;
 }
@@ -289,11 +295,13 @@ function qualityColumnHints(tables) {
 function renderFileDetails(report) {
   const target = document.querySelector('#file-details');
   const tabs = [['summary', 'Resumo'], ['structure', 'Estrutura'], ['columns', 'Colunas'], ['quality', 'Qualidade'], ['keys', 'Chaves'], ['relationships', 'Relacionamentos'], ['anomalies', 'Anomalias'], ['statistics', 'Estatísticas']];
-  target.innerHTML = `<div class="subtle">${escapeHtml(report.filename)} · ${report.tables.length} tabela(s) · ${(report.file_size_bytes / 1048576).toFixed(2)} MB · analisado em ${escapeHtml(new Date(report.analyzed_at).toLocaleString('pt-BR'))}</div>
+  const securityPanel = report.security ? `<div class="panel"><h3>Segurança do arquivo</h3><div class="relationship">Conteúdo potencialmente ativo detectado: ${report.security.active_content_detected ? 'Sim' : 'Não'}</div><div class="relationship">Tipos identificados: ${escapeHtml(report.security.active_content_types.join(', ') || 'nenhum')}</div><div class="relationship">Conteúdo ativo executado: Não · ação: ${escapeHtml(report.security.active_content_action)}</div><div class="relationship">Relações externas seguidas: Não (${report.security.external_relationship_count} detectada(s)) · conexões externas atualizadas: Não</div><div class="relationship">Macros executadas: Não · objetos incorporados executados: Não · fórmulas recalculadas: Não (${escapeHtml(report.security.formulas_action)})</div></div>` : '';
+  target.innerHTML = `<div class="subtle">${escapeHtml(report.filename)} · status ${escapeHtml(report.status)} · ${report.tables.length} aba(s) · ${(report.file_size_bytes / 1048576).toFixed(2)} MB · analisado em ${escapeHtml(new Date(report.analyzed_at).toLocaleString('pt-BR'))}</div>
     <div class="metric-grid dashboard-grid"><div class="metric"><label>TABELAS</label><strong>${report.tables.length}</strong></div><div class="metric"><label>LINHAS</label><strong>${report.tables.reduce((sum, table) => sum + table.rows, 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>COLUNAS</label><strong>${report.tables.reduce((sum, table) => sum + table.columns, 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>NULOS</label><strong>${report.tables.reduce((sum, table) => sum + table.column_analyses.reduce((n, column) => n + column.null_count, 0), 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>DUPLICIDADES</label><strong>${report.tables.reduce((sum, table) => sum + table.duplicate_rows, 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>CHAVES POSSÍVEIS</label><strong>${report.tables.reduce((sum, table) => sum + table.key_candidates.length, 0)}</strong></div><div class="metric"><label>RELACIONAMENTOS</label><strong>${report.relationships.length}</strong></div><div class="metric"><label>ALERTAS</label><strong>${report.tables.reduce((sum, table) => sum + table.quality.alerts.filter(alert => alert.severity !== 'ok').length, 0)}</strong></div><div class="metric"><label>QUALIDADE</label><strong class="${report.quality.classification === 'Crítica' ? 'quality-bad' : ''}">${escapeHtml(report.quality.classification)}</strong></div></div>
     <div class="panel table-head"><label for="table-select">Tabela/aba</label><select class="table-select" id="table-select">${report.tables.map((table, i) => `<option value="${i}">${escapeHtml(table.name)}</option>`).join('')}</select></div>
     <nav class="diagnostic-tabs" aria-label="Seções do diagnóstico">${tabs.map(([id, label], index) => `<button class="diagnostic-tab${index === 0 ? ' active' : ''}" data-tab="${id}">${label}</button>`).join('')}</nav>
     <div id="diagnostic-content"></div>
+    ${securityPanel}
     <div class="panel privacy-note">Prévia dos dados desativada: este relatório não contém valores de células nem rótulos de categorias.</div>
     <div class="panel"><h3>Privacidade e importação</h3><div class="subtle">SHA-256: ${escapeHtml(report.file_sha256)} · configurações CSV e limites registrados no relatório JSON.</div>${report.security_warnings.map(warning => `<div class="subtle">${escapeHtml(warning)}</div>`).join('')}</div>
     ${report.warnings.map(warning => `<div class="warning">⚠ ${escapeHtml(warning)}</div>`).join('')}`;
@@ -318,6 +326,7 @@ function flattenStats(stats, prefix = '') {
 }
 
 function tabContent(tab, report, table) {
+  if (table.status === 'failed') return `<div class="panel"><h3>Aba não processada — ${escapeHtml(table.name)}</h3><p>${escapeHtml(table.error_message || 'A leitura desta aba falhou.')}</p><p class="subtle">As outras abas legíveis continuam disponíveis no relatório.</p></div>`;
   if (tab === 'summary') return `<div class="panel"><h3>Diagnóstico do arquivo</h3><p>Qualidade geral: <b>${escapeHtml(report.quality.classification)}</b> (${report.quality.score}/100), segundo as faixas e pesos configurados.</p>${renderQualityDimensions(report.quality)}${qualityReasons(report.quality)}${qualityColumnHints(report.tables)}<p class="subtle">${report.tables.some(item => item.sampled) ? 'Alguns indicadores foram calculados sobre amostra limitada; consulte os avisos.' : 'As tabelas foram perfiladas sem amostragem.'}</p></div><div class="panel">${renderTableSummary(report.tables)}</div>`;
   if (tab === 'structure') return `<div class="panel"><h3>${escapeHtml(table.name)} — ${escapeHtml(table.table_type)}</h3><p>${escapeHtml(table.table_type_reason)} Confiança: ${escapeHtml(table.table_type_confidence)}.</p><p>${table.rows.toLocaleString('pt-BR')} linhas identificadas; ${table.rows_analyzed.toLocaleString('pt-BR')} perfiladas${table.sampled ? ' (amostra)' : ''}; ${table.columns} colunas, ${table.empty_rows} linhas vazias na área perfilada, ${table.empty_columns} colunas vazias e ${table.duplicate_rows} linhas duplicadas.</p>${table.sampled ? '<div class="warning">Indicadores calculados sobre amostra; contagens observadas na amostra podem diferir do arquivo completo.</div>' : ''}</div><div class="panel">${renderTableSummary([table])}</div>`;
   if (tab === 'columns') return `<div class="panel"><h3>Perfil e tipo provável de cada coluna</h3><div class="scroll"><table><thead><tr><th>COLUNA</th><th>PAPEL SEMÂNTICO</th><th>TIPO INFERIDO</th><th>TIPO FÍSICO</th><th>CONFIANÇA / MOTIVO</th><th>VALORES</th><th>NULOS</th><th>PREENCHIDO</th><th>ÚNICOS</th><th>CARDINALIDADE</th><th>REPETIDOS</th><th>INVÁLIDOS</th><th>ZEROS</th><th>NEGATIVOS</th><th>ESTATÍSTICAS AGREGADAS</th></tr></thead><tbody>${table.column_analyses.map(column => `<tr><td>${escapeHtml(column.name)}${column.sensitive ? '<div class="subtle">Estatísticas suprimidas por possível sensibilidade</div>' : ''}</td><td>${escapeHtml(column.semantic_role || 'unknown')} (${escapeHtml(column.semantic_role_confidence || 'low')})</td><td>${escapeHtml(column.inferred_type)}</td><td>${escapeHtml(column.physical_type || column.original_type)}</td><td>${escapeHtml(column.confidence)}<div class="subtle">${escapeHtml(column.type_reason)}</div></td><td>${column.value_count.toLocaleString('pt-BR')}</td><td>${column.null_count} (${column.null_pct}%)<div class="subtle">${escapeHtml(column.null_classification)}; avalie se a ausência é esperada.</div></td><td>${column.completeness_pct}%</td><td>${column.distinct_count} (${column.distinct_pct}%)</td><td>${escapeHtml(column.cardinality)}</td><td>${column.duplicate_count}</td><td>${column.inconsistent_values}</td><td>${column.zero_count ?? '—'}</td><td>${column.negative_count ?? '—'}</td><td>${escapeHtml(flattenStats(column.statistics).map(([key, value]) => `${key}: ${value}`).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div></div>`;
@@ -329,5 +338,5 @@ function tabContent(tab, report, table) {
 }
 
 function renderTableSummary(tables) {
-  return `<div class="scroll"><table><thead><tr><th>TABELA/ABA</th><th>TIPO SUGERIDO</th><th>LINHAS</th><th>COLUNAS</th><th>VAZIAS</th><th>DUPLICADAS</th><th>QUALIDADE</th></tr></thead><tbody>${tables.map(table => `<tr><td>${escapeHtml(table.name)}</td><td>${escapeHtml(table.table_type)}</td><td>${table.rows.toLocaleString('pt-BR')}${table.sampled ? ` <span class="subtle">(amostra ${table.rows_analyzed.toLocaleString('pt-BR')})</span>` : ''}</td><td>${table.columns}</td><td>${table.empty_rows} linhas / ${table.empty_columns} colunas</td><td>${table.duplicate_rows}</td><td>${escapeHtml(table.quality.classification)} (${table.quality.score})</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>TABELA/ABA</th><th>STATUS</th><th>TIPO SUGERIDO</th><th>LINHAS</th><th>COLUNAS</th><th>VAZIAS</th><th>DUPLICADAS</th><th>QUALIDADE</th></tr></thead><tbody>${tables.map(table => `<tr><td>${escapeHtml(table.name)}</td><td>${escapeHtml(table.status || 'completed')}${table.error_message ? `<div class="subtle">${escapeHtml(table.error_message)}</div>` : ''}</td><td>${escapeHtml(table.table_type)}</td><td>${table.rows.toLocaleString('pt-BR')}${table.sampled ? ` <span class="subtle">(amostra ${table.rows_analyzed.toLocaleString('pt-BR')})</span>` : ''}</td><td>${table.columns}</td><td>${table.empty_rows} linhas / ${table.empty_columns} colunas</td><td>${table.duplicate_rows}</td><td>${escapeHtml(table.quality.classification)} (${table.quality.score})</td></tr>`).join('')}</tbody></table></div>`;
 }

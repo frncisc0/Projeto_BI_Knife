@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 
 from app.analyzers.statistics_analyzer import numeric_values
 from app.core.config import get_settings
-from app.core.exceptions import AnalysisError
+from app.core.exceptions import AnalysisError, FileValidationError
 
 
 _HEADER_TERMS = {
@@ -89,33 +89,47 @@ def detect_csv_options(content: bytes, encoding: str) -> dict[str, Any]:
 
 
 def _read_xlsx(content: bytes, settings: Any, deadline: float) -> dict[str, pd.DataFrame]:
-    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True, keep_links=False)
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True, keep_links=False, keep_vba=False)
     try:
         output: dict[str, pd.DataFrame] = {}
         worksheets = workbook.worksheets
+        remaining_cells = settings.max_xlsx_profile_cells
         for worksheet in worksheets[:settings.max_tables_to_analyze]:
-            max_columns_total = worksheet.max_column or 0
-            max_columns = min(max_columns_total, settings.max_columns_to_analyze)
-            total_rows = max(0, (worksheet.max_row or 0) - 1)
-            row_limit = _row_limit(max_columns)
-            rows = worksheet.iter_rows(
-                min_row=1,
-                max_row=min(worksheet.max_row or 0, row_limit + 1),
-                max_col=max_columns,
-                values_only=True,
-            )
-            values = list(rows)
-            if time.monotonic() > deadline:
-                raise AnalysisError("A análise excedeu o tempo máximo configurado.")
-            if values:
-                headers = [str(value).strip() if value is not None else "" for value in values[0]]
-                frame = pd.DataFrame(values[1:], columns=headers)
-            else:
+            try:
+                max_columns_total = worksheet.max_column or 0
+                max_columns = min(max_columns_total, settings.max_columns_to_analyze)
+                total_rows = max(0, (worksheet.max_row or 0) - 1)
+                row_limit = min(_row_limit(max_columns), remaining_cells // max(1, max_columns))
+                values = list(worksheet.iter_rows(
+                    min_row=1,
+                    max_row=min(worksheet.max_row or 0, row_limit + 1),
+                    max_col=max_columns,
+                    values_only=True,
+                ))
+                if time.monotonic() > deadline:
+                    raise AnalysisError("A análise excedeu o tempo máximo configurado.")
+                if values:
+                    headers = [str(value).strip() if value is not None else "" for value in values[0]]
+                    frame = pd.DataFrame(values[1:], columns=headers)
+                else:
+                    frame = pd.DataFrame()
+                header_row_used = 1 if values else None
+                del values
+                remaining_cells = max(0, remaining_cells - len(frame) * max_columns)
+                frame.attrs.update({"total_rows": total_rows, "rows_analyzed": len(frame),
+                                    "sampled": total_rows > len(frame), "columns_total": max_columns_total,
+                                    "columns_analyzed": max_columns, "tables_total": len(worksheets),
+                                    "worksheet_status": "completed",
+                                    "header_row_used": header_row_used,
+                                    "import_settings": {"reader": "openpyxl-read-only", "formulas": "cached-values-only"}})
+            except AnalysisError:
+                raise
+            except Exception as exc:
                 frame = pd.DataFrame()
-            frame.attrs.update({"total_rows": total_rows, "rows_analyzed": len(frame),
-                                "sampled": total_rows > len(frame), "columns_total": max_columns_total,
-                                "columns_analyzed": max_columns, "tables_total": len(worksheets),
-                                "import_settings": {"reader": "openpyxl", "formulas": "cached-values-only"}})
+                frame.attrs.update({"total_rows": 0, "rows_analyzed": 0, "sampled": False,
+                                    "columns_total": 0, "columns_analyzed": 0,
+                                    "tables_total": len(worksheets), "worksheet_status": "failed",
+                                    "worksheet_error": f"Falha de leitura da aba ({type(exc).__name__})."})
             output[worksheet.title] = frame
         return output
     finally:
@@ -129,11 +143,15 @@ def read_tables(
     csv_delimiter: str = "auto",
     decimal_separator: str = "auto",
     header_mode: str = "auto",
+    security_metadata: dict[str, Any] | None = None,
 ) -> dict[str, pd.DataFrame]:
     settings = get_settings()
     deadline = time.monotonic() + settings.analysis_timeout_seconds
     try:
-        if file_type == "xlsx":
+        if file_type in {"xlsx", "xlsm"}:
+            if security_metadata is None:
+                from app.security.file_validation import inspect_xlsx_package
+                inspect_xlsx_package(content)
             return _read_xlsx(content, settings, deadline)
 
         options = detect_csv_options(content, csv_encoding or "utf-8")
@@ -166,7 +184,7 @@ def read_tables(
                                                 "header_mode": header_mode, "delimiter_ambiguous": options["ambiguous_delimiter"],
                                                 "header_ambiguous": options["ambiguous_header"]}})
         return {"Dados": frame}
-    except AnalysisError:
+    except (AnalysisError, FileValidationError):
         raise
     except Exception as exc:
         raise AnalysisError("O arquivo foi validado, mas não pôde ser analisado. Verifique a estrutura e tente novamente.") from exc

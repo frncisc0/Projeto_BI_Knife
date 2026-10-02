@@ -15,6 +15,7 @@ class Settings:
     max_rows_to_analyze = int(os.getenv("BI_MAX_ROWS_TO_ANALYZE", "200000"))
     max_columns_to_analyze = int(os.getenv("BI_MAX_COLUMNS_TO_ANALYZE", "100"))
     max_cells_to_analyze = int(os.getenv("BI_MAX_CELLS_TO_ANALYZE", "250000"))
+    max_xlsx_profile_cells = int(os.getenv("BI_MAX_XLSX_PROFILE_CELLS", "1000000"))
     max_tables_to_analyze = int(os.getenv("BI_MAX_TABLES_TO_ANALYZE", "20"))
     max_relationship_value_rows = int(os.getenv("BI_MAX_RELATIONSHIP_VALUE_ROWS", "10000"))
     max_batch_relationship_cells = int(os.getenv("BI_MAX_BATCH_RELATIONSHIP_CELLS", "250000"))
@@ -36,7 +37,7 @@ class Settings:
     sample_size = int(os.getenv("BI_SAMPLE_SIZE", "100000"))
     analysis_timeout_seconds = int(os.getenv("BI_ANALYSIS_TIMEOUT_SECONDS", "300"))
     report_max_bytes = int(os.getenv("BI_REPORT_MAX_BYTES", str(25 * 1024 * 1024)))
-    allowed_extensions = {".xlsx", ".csv"}
+    allowed_extensions = {".xlsx", ".xlsm", ".csv"}
     frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
 
 

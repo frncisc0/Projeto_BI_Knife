@@ -76,8 +76,26 @@ class QualityAnalysis(BaseModel):
     alerts: list[dict[str, str | int | float]] = Field(default_factory=list)
 
 
+class FileSecurityAnalysis(BaseModel):
+    active_content_detected: bool = False
+    active_content_types: list[str] = Field(default_factory=list)
+    active_content_action: Literal["not_executed"] = "not_executed"
+    external_relationships_detected: bool = False
+    external_relationship_count: int = 0
+    external_relationships_followed: bool = False
+    external_connections_updated: bool = False
+    macros_executed: bool = False
+    external_connections_accessed: bool = False
+    embedded_objects_executed: bool = False
+    formulas_recalculated: bool = False
+    formulas_action: Literal["cached_values_only", "not_applicable"] = "not_applicable"
+
+
 class TableAnalysis(BaseModel):
     name: str
+    status: Literal["completed", "failed"] = "completed"
+    error_message: str | None = None
+    header_row_used: int | None = None
     rows: int
     rows_analyzed: int
     sampled: bool
@@ -112,12 +130,13 @@ class FileAnalysis(BaseModel):
     analyzed_at: datetime
     processing_time_ms: int
     filename: str
-    file_type: Literal["csv", "xlsx"]
+    file_type: Literal["csv", "xlsx", "xlsm"]
     file_size_bytes: int
     file_sha256: str
-    status: Literal["completed"]
+    status: Literal["completed", "partial", "failed"]
     settings: dict[str, Any] = Field(default_factory=dict)
     security_warnings: list[str] = Field(default_factory=list)
+    security: FileSecurityAnalysis | None = None
     tables: list[TableAnalysis]
     relationships: list[RelationshipCandidate]
     anomalies: list[Anomaly] = Field(default_factory=list)

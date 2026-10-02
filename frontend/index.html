@@ -12,11 +12,11 @@
   <main>
     <section class="hero"><div class="eyebrow">FERRAMENTA DE DIAGNÓSTICO DE DADOS <span>·</span> V0.3.0</div><h1>Conheça seus dados<br><em>antes de construir.</em></h1><p>Inspecione planilhas e arquivos CSV. Seus dados permanecem neste computador.</p></section>
     <section class="upload-card" id="drop-zone">
-      <input id="file-input" type="file" accept=".xlsx,.csv" multiple hidden>
-      <input id="folder-input" type="file" accept=".xlsx,.csv" webkitdirectory directory multiple hidden>
+      <input id="file-input" type="file" accept=".xlsx,.xlsm,.csv" multiple hidden>
+      <input id="folder-input" type="file" accept=".xlsx,.xlsm,.csv" webkitdirectory directory multiple hidden>
       <div class="upload-icon">↥</div><h2>Solte arquivos ou uma pasta aqui</h2><p>ou escolha no computador</p>
       <div class="picker-actions"><button class="text-button" id="browse">Escolher arquivos</button><button class="text-button" id="browse-folder">Escolher pasta</button></div>
-      <div class="formats"><span>.XLSX</span><span>.CSV</span><span>ATÉ 100 MB POR ARQUIVO</span><span>ATÉ 50 ARQUIVOS</span></div>
+      <div class="formats"><span>.XLSX</span><span>.XLSM (MACROS NÃO EXECUTADAS)</span><span>.CSV</span><span>ATÉ 100 MB POR ARQUIVO</span><span>ATÉ 50 ARQUIVOS</span></div>
       <details class="import-options"><summary>Opções de importação CSV</summary><div class="option-grid">
         <label>Delimitador<select id="csv-delimiter"><option value="auto">Detectar automaticamente</option><option value=",">Vírgula (,)</option><option value=";">Ponto e vírgula (;)</option><option value="tab">Tabulação</option><option value="|">Barra vertical (|)</option></select></label>
         <label>Separador decimal<select id="decimal-separator"><option value="auto">Detectar automaticamente</option><option value=".">Ponto (.)</option><option value=",">Vírgula (,)</option></select></label>

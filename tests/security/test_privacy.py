@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 import socket
+import zipfile
 from io import BytesIO
 
 from starlette.datastructures import UploadFile
@@ -95,6 +96,37 @@ def test_analysis_succeeds_when_network_connections_are_disabled(monkeypatch):
     upload = UploadFile(filename="synthetic.csv", file=BytesIO(b"id,valor\n1,10\n2,20\n"))
     report = asyncio.run(analyze(upload, "auto", "auto", "auto"))
     assert report["status"] == "completed"
+
+
+def test_xlsx_external_relationship_is_never_followed(monkeypatch):
+    from openpyxl import Workbook
+
+    def deny_network(*args, **kwargs):
+        raise AssertionError("O processamento Excel tentou abrir uma conexão de rede.")
+
+    monkeypatch.setattr(socket, "create_connection", deny_network)
+    monkeypatch.setattr(socket, "getaddrinfo", deny_network)
+    workbook = Workbook()
+    workbook.active.append(["id", "amount"])
+    workbook.active.append([1, 10])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    modified = BytesIO()
+    with zipfile.ZipFile(BytesIO(buffer.getvalue())) as original, zipfile.ZipFile(modified, "w", zipfile.ZIP_DEFLATED) as updated:
+        for name in original.namelist():
+            data = original.read(name)
+            if name == "_rels/.rels":
+                data = data.replace(b"</Relationships>", b'<Relationship Id="rIdOutside" TargetMode="External" Target="https://example.invalid/source" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"/></Relationships>')
+            updated.writestr(name, data)
+        updated.writestr("xl/connections.xml", "<connections />")
+    upload = UploadFile(filename="external.xlsx", file=BytesIO(modified.getvalue()))
+    report = asyncio.run(analyze(upload, "auto", "auto", "auto"))
+
+    assert report["status"] == "completed"
+    assert report["security"]["external_relationships_detected"] is True
+    assert report["security"]["external_relationships_followed"] is False
+    assert report["security"]["external_connections_accessed"] is False
+    assert "connection_definition" in report["security"]["active_content_types"]
 
 
 def test_production_sources_have_no_external_network_clients_or_urls():

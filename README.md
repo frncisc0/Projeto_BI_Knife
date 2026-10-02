@@ -1,6 +1,6 @@
 # BI Swiss Knife
 
-Aplicação local para diagnosticar arquivos `.xlsx` e `.csv`. A versão **0.3.0** aprofunda o profiling e a análise de qualidade, mantendo o processamento local e relatórios sem valores de células.
+Aplicação local para diagnosticar arquivos `.xlsx`, `.xlsm` e `.csv`. A versão **0.3.0** aprofunda o profiling e a análise de qualidade, mantendo o processamento local e relatórios sem valores de células.
 
 ## Requisitos
 
@@ -32,6 +32,7 @@ As opções são lidas de variáveis de ambiente antes de iniciar o servidor:
 | `BI_SAMPLE_SIZE` | 100000 | Amostra padrão quando sampling está ligado |
 | `BI_MAX_COLUMNS_TO_ANALYZE` | 100 | Limite de colunas perfiladas |
 | `BI_MAX_CELLS_TO_ANALYZE` | 250000 | Limite aproximado de células perfiladas por tabela |
+| `BI_MAX_XLSX_PROFILE_CELLS` | 1000000 | Limite de células perfiladas em conjunto entre as abas de um workbook |
 | `BI_MAX_TABLES_TO_ANALYZE` | 20 | Limite de abas analisadas por XLSX |
 | `BI_MAX_RELATIONSHIP_VALUE_ROWS` | 10000 | Valores por coluna usados na verificação de relacionamentos |
 | `BI_MAX_BATCH_RELATIONSHIP_CELLS` | 250000 | Limite total de células mantidas temporariamente para comparar relacionamentos em um lote |
@@ -48,7 +49,7 @@ Use `BI_QUALITY_*` para configurar os limites e pesos do score de qualidade; os 
 
 ## Funcionalidades
 
-- Upload local de vários CSV e XLSX, inclusive ao soltar pastas, com descoberta de abas.
+- Upload local de CSV, XLSX e XLSM, inclusive ao soltar pastas, com descoberta de abas.
 - Seleção de arquivos múltiplos ou pasta; subpastas também são percorridas ao arrastar a pasta (Chrome/Edge).
 - Lotes de até 50 arquivos, 100 MB por arquivo e 500 MB no total por padrão; arquivos com erro são informados sem interromper os demais.
 - Perfil de colunas com tipo físico, tipo inferido, papel semântico provável e confiança, valores ausentes, cardinalidade, possíveis chaves e valores inválidos.
@@ -56,6 +57,7 @@ Use `BI_QUALITY_*` para configurar os limites e pesos do score de qualidade; os 
 - Qualidade transparente por dimensão, duplicidades de linha, outliers IQR e sugestões explicáveis entre abas e arquivos CSV do mesmo lote.
 - Configurações CSV para delimitador, separador decimal e cabeçalho, com detecção de encoding.
 - Quando a presença de cabeçalho CSV é ambígua, a interface pergunta se a primeira linha é cabeçalho ou dado; também é possível manter nomes genéricos.
+- Conteúdo potencialmente ativo em Excel é reportado sem execução; relações externas não são seguidas nem atualizadas. Abas legíveis continuam sendo analisadas quando macros, conexões ou objetos são detectados.
 - O relatório JSON estruturado é baixado automaticamente ao concluir a análise; CSV-resumo e HTML também ficam disponíveis nos botões de exportação.
 - Campos com nomes que sugerem dados pessoais ou financeiros têm estatísticas suprimidas.
 - Interface em português e sem recursos externos obrigatórios.
@@ -66,7 +68,7 @@ Use `BI_QUALITY_*` para configurar os limites e pesos do score de qualidade; os 
 python -m pytest
 ```
 
-Os dados de teste são sintéticos. Consulte [docs/architecture.md](docs/architecture.md), [SECURITY.md](SECURITY.md) e [docs/roadmap.md](docs/roadmap.md).
+Os dados de teste são sintéticos. Consulte [docs/architecture.md](docs/architecture.md), [docs/xlsx-ingestion.md](docs/xlsx-ingestion.md), [SECURITY.md](SECURITY.md) e [docs/roadmap.md](docs/roadmap.md).
 
 ## Limitações atuais
 

@@ -3,6 +3,10 @@
 ## 0.3.0 — 2026-10-02
 
 ### Added
+- XLSX/XLSM with detected macros, connection definitions, external links, ActiveX or embedded objects can be profiled without executing those contents; DTD/ENTITY and invalid packages remain rejected.
+- Excel reports include security metadata and per-worksheet processing status, allowing partial results when one sheet fails.
+- Excel profiling has a configurable combined cell cap across worksheets to bound retained samples.
+- Excel ingestion policy documented in `docs/xlsx-ingestion.md`.
 - Diagnóstico estruturado com qualidade, confiança de tipos, chaves simples/compostas e sugestões de tabela.
 - Estatísticas agregadas, sazonalidade de datas e detecção explicável de outliers IQR.
 - Limites de linhas, colunas, células, timeout e tamanho de relatório; relatórios identificam amostragem.
