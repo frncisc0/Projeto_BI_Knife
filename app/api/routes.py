@@ -48,9 +48,18 @@ def export_pdf_report(payload: dict = Body(...)) -> Response:
     _validate_report_payload(payload)
     try:
         content = render_pdf_report(payload)
+    except ModuleNotFoundError as exc:
+        if exc.name == "reportlab" or (exc.name and exc.name.startswith("reportlab.")):
+            logger.error("PDF export dependency unavailable; dependency=%s", exc.name)
+            raise HTTPException(
+                status_code=503,
+                detail="Dependência ReportLab ausente. Execute 'python -m pip install -r requirements.txt' no ambiente virtual.",
+            ) from exc
+        logger.error("PDF export import failure; error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Falha interna ao carregar a exportação PDF.") from exc
     except ImportError as exc:
-        logger.error("PDF export dependency unavailable; error_type=%s", type(exc).__name__)
-        raise HTTPException(status_code=503, detail="Exportação PDF indisponível. Instale as dependências do projeto.") from exc
+        logger.error("PDF export import failure; error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Falha interna ao carregar a exportação PDF.") from exc
     return Response(content=content, media_type="application/pdf",
                     headers={"Content-Disposition": 'attachment; filename="bi-swiss-knife-relatorio-executivo.pdf"',
                              "Cache-Control": "no-store"})

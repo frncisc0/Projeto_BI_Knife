@@ -164,6 +164,40 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         for warning in [*report.get("warnings", []), *report.get("security_warnings", [])][:30]:
             story.append(Paragraph("• " + _safe(warning), styles["SmallText"]))
 
+    story.append(Paragraph("8. Anomalias", styles["Section"]))
+    anomaly_rows = [["Arquivo", "Coluna", "Método", "Ocorrências", "Gravidade", "Descrição"]]
+    for filename, report in reports:
+        for anomaly in report.get("anomalies", []):
+            anomaly_rows.append([filename, anomaly.get("column", "—"), anomaly.get("method", "—"),
+                                 str(anomaly.get("count", 0)),
+                                 severity_names.get(anomaly.get("severity"), "Informação"),
+                                 anomaly.get("description", "Anomalia identificada.")])
+    if len(anomaly_rows) == 1:
+        story.append(Paragraph("Nenhuma anomalia foi registrada.", styles["BodyText"]))
+    else:
+        story.append(_simple_table(anomaly_rows, LongTable, TableStyle, Paragraph, styles,
+                                   [30 * mm, 30 * mm, 29 * mm, 19 * mm, 21 * mm, 47 * mm], repeat_rows=1))
+
+    story.append(Paragraph("9. Detalhes técnicos", styles["Section"]))
+    technical_rows = [["Arquivo", "Tipo", "Tamanho", "Linhas analisadas / disponíveis", "Colunas", "Amostragem"]]
+    for filename, report in reports:
+        tables = report.get("tables", [])
+        analyzed_rows = sum(int(table.get("rows_analyzed", 0) or 0) for table in tables)
+        available_rows = sum(int(table.get("rows_available", table.get("rows", 0)) or 0) for table in tables)
+        columns = sum(int(table.get("columns_analyzed", table.get("columns", 0)) or 0) for table in tables)
+        sampled_tables = [table for table in tables if table.get("sampled")]
+        sampling = (", ".join(sorted({str(table.get("sampling_method", "amostragem"))
+                                     for table in sampled_tables})) if sampled_tables else "Não")
+        technical_rows.append([filename, report.get("file_type", "—"),
+                               f"{int(report.get('file_size_bytes', 0) or 0) / (1024 * 1024):.2f} MB",
+                               f"{analyzed_rows} / {available_rows}", str(columns), sampling])
+    story.append(_simple_table(technical_rows, LongTable, TableStyle, Paragraph, styles,
+                               [43 * mm, 17 * mm, 22 * mm, 42 * mm, 17 * mm, 35 * mm], repeat_rows=1))
+    for filename, report in reports:
+        story.append(Paragraph(f"{_safe(filename)} — identificador da análise: {_safe(report.get('analysis_id'))}; "
+                               f"duração: {_safe(_duration(report.get('processing_time_ms', 0)))}; "
+                               f"abas registradas: {len(report.get('tables', []))}.", styles["SmallText"]))
+
     def page_chrome(canvas: Any, doc_obj: Any) -> None:
         canvas.saveState()
         width, height = A4

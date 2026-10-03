@@ -62,3 +62,20 @@ def test_report_api_and_frontend_use_existing_payload_without_reanalysis():
     assert "test-report.csv" in html_response.body.decode("utf-8")
     assert pdf_response.media_type == "application/pdf"
     assert pdf_response.body.startswith(b"%PDF-")
+
+
+def test_pdf_api_names_missing_reportlab_dependency(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+    from app.api import routes
+
+    def missing_reportlab(_payload):
+        raise ModuleNotFoundError("No module named 'reportlab'", name="reportlab")
+
+    monkeypatch.setattr(routes, "render_pdf_report", missing_reportlab)
+    with pytest.raises(HTTPException) as error:
+        routes.export_pdf_report(_batch())
+
+    assert error.value.status_code == 503
+    assert "ReportLab" in error.value.detail
+    assert "requirements.txt" in error.value.detail

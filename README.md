@@ -18,6 +18,8 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Abra http://127.0.0.1:8000. O servidor escuta somente no loopback por padrão. Após instalar as dependências, a aplicação funciona sem internet.
 
+Ao atualizar o projeto pelo GitHub, execute novamente `python -m pip install -r requirements.txt` no ambiente virtual antes de iniciar o servidor. Isso instala dependências adicionadas em atualizações, incluindo ReportLab para exportação de PDF.
+
 ### Configuração
 
 As opções são lidas de variáveis de ambiente antes de iniciar o servidor:
