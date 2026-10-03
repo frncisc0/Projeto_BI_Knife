@@ -46,6 +46,7 @@ class ColumnAnalysis(BaseModel):
     duplicate_count: int
     empty: bool
     key_candidate: bool
+    key_assessment: Literal["strong_candidate", "possible_identifier", "high_uniqueness_measure", "high_uniqueness_unconfirmed", "not_candidate"] = "not_candidate"
     key_confidence: Literal["low", "medium", "high"] | None = None
     key_reasons: list[str] = Field(default_factory=list)
     inconsistent_values: int = 0

@@ -5,7 +5,7 @@ import pandas as pd
 from app.analyzers.statistics_analyzer import numeric_values
 
 
-IDENTIFIER_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número", "cpf", "cnpj")
+IDENTIFIER_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número", "cpf", "cnpj", "pedido", "processo")
 SENSITIVE_NAME_CATEGORIES = {
     "cpf": {"cpf"}, "cnpj": {"cnpj"}, "telefone": {"telefone", "celular", "phone", "mobile"},
     "email": {"email", "mail"}, "rg": {"rg"}, "documento": {"documento", "document", "national_id", "ssn"},

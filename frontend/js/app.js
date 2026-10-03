@@ -165,6 +165,9 @@ async function submitBatchWithProgress(files, options) {
   updateProgress({ progress: 0, stage: 'initializing', message: 'Preparando envio local', status: 'running',
     filename: files.length === 1 ? fileLabel(files[0]) : files.length + ' arquivos',
     elapsed_seconds: 0, estimated_remaining_seconds: null });
+  // The upload panel is taller than a typical viewport. Bring progress into view
+  // before waiting for the upload/job response so the user sees feedback at once.
+  progressCard.scrollIntoView({ block: 'center' });
   const data = new FormData();
   files.forEach(file => data.append('uploads', file, fileLabel(file)));
   Object.entries(options).forEach(([key, value]) => data.append(key, value));
@@ -262,12 +265,13 @@ function renderBatch(batch) {
   }).join('');
   const details = successes.length ? `<div class="panel"><div class="table-head"><h3>Detalhes do arquivo</h3><select class="table-select" id="file-select">${successes.map((item, i) => `<option value="${i}">${escapeHtml(item.filename)}</option>`).join('')}</select></div><div id="file-details"></div></div>` : '<div class="panel subtle">Nenhum arquivo pôde ser analisado.</div>';
   resultEl.hidden = false;
-  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">HTML</button></div></div>
+  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">Baixar JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">Abrir HTML offline</button><button id="export-pdf" class="secondary-button">Exportar PDF</button></div></div>
     <div class="metric-grid"><div class="metric"><label>LINHAS</label><strong>${totalRows.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>COLUNAS</label><strong>${totalColumns.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>ITENS PARA REVISAR</label><strong class="${issueCount ? 'quality-bad' : ''}">${issueCount.toLocaleString('pt-BR')}</strong><span class="subtle">sem contar ausências</span></div></div>
     <div class="panel"><h3>Arquivos selecionados</h3>${fileRows}</div>${details}`;
   resultEl.querySelector('#export-json').addEventListener('click', () => downloadReport(JSON.stringify(batch, null, 2), 'application/json', 'bi-swiss-knife-relatorio.json'));
   resultEl.querySelector('#export-csv').addEventListener('click', () => downloadReport(batchCsv(batch), 'text/csv;charset=utf-8', 'bi-swiss-knife-resumo.csv'));
-  resultEl.querySelector('#export-html').addEventListener('click', () => downloadReport(batchHtml(batch), 'text/html;charset=utf-8', 'bi-swiss-knife-relatorio.html'));
+  resultEl.querySelector('#export-html').addEventListener('click', () => exportDerivedReport(batch, '/api/report-html', 'text/html;charset=utf-8', 'bi-swiss-knife-relatorio.html', true));
+  resultEl.querySelector('#export-pdf').addEventListener('click', () => exportDerivedReport(batch, '/api/report-pdf', 'application/pdf', 'bi-swiss-knife-relatorio-executivo.pdf'));
   if (successes.length) {
     const selector = resultEl.querySelector('#file-select');
     const update = () => renderFileDetails(successes[Number(selector.value)].analysis);
@@ -288,6 +292,32 @@ function downloadReport(content, type, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+async function exportDerivedReport(batch, endpoint, mediaType, filename, openInTab = false) {
+  const preview = openInTab ? window.open('about:blank', '_blank') : null;
+  if (preview) preview.opener = null;
+  try {
+    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(batch) });
+    if (!response.ok) {
+      let detail = 'Não foi possível gerar o relatório.';
+      try { detail = (await response.json()).detail || detail; } catch { /* keep the safe generic message */ }
+      throw new Error(detail);
+    }
+    const blob = await response.blob();
+    if (preview) {
+      const url = URL.createObjectURL(new Blob([blob], { type: mediaType }));
+      preview.location.replace(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } else {
+      downloadReport(blob, mediaType, filename);
+    }
+    showStatus(filename.endsWith('.pdf') ? 'PDF executivo gerado localmente.' : 'HTML offline aberto em outra guia.', 'success');
+  } catch (error) {
+    if (preview) preview.close();
+    showStatus(error.message || 'Não foi possível gerar o relatório.', 'error');
+  }
+}
+
 function csvCell(value) {
   let text = String(value ?? '');
   if (/^[\s]*[=+@\-]/.test(text)) text = `'${text}`;
@@ -302,14 +332,6 @@ function batchCsv(batch) {
     column.anomalies.reduce((sum, anomaly) => sum + anomaly.count, 0), table.quality.classification,
   ]))));
   return '\ufeff' + rows.map(row => row.map(csvCell).join(';')).join('\r\n');
-}
-
-function batchHtml(batch) {
-  const rows = batch.results.map(item => {
-    const analysis = item.analysis;
-    return `<tr><td>${escapeHtml(item.filename)}</td><td>${analysis ? (analysis.status === 'partial' ? 'Parcial' : analysis.status === 'failed' ? 'Falha' : 'Concluída') : 'Erro'}</td><td>${analysis ? analysis.tables.length : escapeHtml(item.error)}</td><td>${analysis ? escapeHtml(analysis.quality.classification) : '—'}</td></tr>`;
-  }).join('');
-  return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Relatório BI Swiss Knife</title><style>body{font:15px system-ui;max-width:1000px;margin:40px auto;color:#17231b}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #ddd}th{background:#eef5ef}</style><h1>Diagnóstico BI Swiss Knife</h1><p>Relatório local; não contém prévia de linhas nem rótulos de categorias.</p><table><thead><tr><th>Arquivo</th><th>Status</th><th>Abas</th><th>Qualidade</th></tr></thead><tbody>${rows}</tbody></table></html>`;
 }
 
 function renderQualityDimensions(quality) {
@@ -375,7 +397,14 @@ function tabContent(tab, report, table) {
   if (tab === 'structure') return '<div class="panel"><h3>' + escapeHtml(table.name) + ' — ' + escapeHtml(table.table_type) + '</h3><p>' + escapeHtml(table.table_type_reason) + ' Confiança: ' + escapeHtml(table.table_type_confidence) + '.</p><p>Status: ' + escapeHtml(table.status) + ' · cabeçalho ' + escapeHtml(table.header_detection?.status || 'não informado') + (table.header_row_used ? ', linha ' + table.header_row_used : '') + ' (' + escapeHtml(table.header_detection?.header_source || '—') + ').</p><p>' + Number(table.rows_available ?? table.rows).toLocaleString('pt-BR') + ' linhas disponíveis; ' + table.rows_analyzed.toLocaleString('pt-BR') + ' analisadas; ' + Number(table.rows_empty || 0).toLocaleString('pt-BR') + ' vazias internas; ' + Number(table.trailing_empty_rows || 0).toLocaleString('pt-BR') + ' vazias finais; sampling ' + (table.sampled ? escapeHtml(table.sampling_method || 'sim') : 'não') + '.</p><p>' + table.columns + ' colunas; ' + table.empty_columns + ' colunas vazias e ' + table.duplicate_rows + ' linhas duplicadas na amostra.</p>' + (table.sampled ? '<div class="warning">Indicadores calculados sobre amostra uniforme dos registros preenchidos.</div>' : '') + '</div><div class="panel">' + renderTableSummary([table]) + '</div>';
   if (tab === 'columns') return `<div class="panel"><h3>Perfil e tipo provável de cada coluna</h3><div class="scroll"><table><thead><tr><th>COLUNA</th><th>PAPEL SEMÂNTICO</th><th>TIPO INFERIDO</th><th>TIPO FÍSICO</th><th>CONFIANÇA / MOTIVO</th><th>VALORES</th><th>NULOS</th><th>PREENCHIDO</th><th>ÚNICOS</th><th>CARDINALIDADE</th><th>REPETIDOS</th><th>INVÁLIDOS</th><th>ZEROS</th><th>NEGATIVOS</th><th>ESTATÍSTICAS AGREGADAS</th></tr></thead><tbody>${table.column_analyses.map(column => `<tr><td>${escapeHtml(column.name)}${column.sensitive ? '<div class="subtle">Estatísticas suprimidas por possível sensibilidade</div>' : ''}</td><td>${escapeHtml(column.semantic_role || 'unknown')} (${escapeHtml(column.semantic_role_confidence || 'low')})</td><td>${escapeHtml(column.inferred_type)}</td><td>${escapeHtml(column.physical_type || column.original_type)}</td><td>${escapeHtml(column.confidence)}<div class="subtle">${escapeHtml(column.type_reason)}</div></td><td>${column.value_count.toLocaleString('pt-BR')}</td><td>${column.null_count} (${column.null_pct}%)<div class="subtle">${escapeHtml(column.null_classification)}; avalie se a ausência é esperada.</div></td><td>${column.completeness_pct}%</td><td>${column.distinct_count} (${column.distinct_pct}%)</td><td>${escapeHtml(column.cardinality)}</td><td>${column.duplicate_count}</td><td>${column.inconsistent_values}</td><td>${column.zero_count ?? '—'}</td><td>${column.negative_count ?? '—'}</td><td>${escapeHtml(flattenStats(column.statistics).map(([key, value]) => `${key}: ${value}`).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div></div>`;
   if (tab === 'quality') return `<div class="panel"><h3>Qualidade — ${escapeHtml(table.name)}</h3><p><b>${escapeHtml(table.quality.classification)}</b> · ${table.quality.score}/100</p>${renderQualityDimensions(table.quality)}${qualityColumnHints([table])}${table.quality.alerts.map(alert => `<div class="relationship"><span class="pill severity-${escapeHtml(alert.severity)}">${{critical:'🔴 Crítico',attention:'🟠 Atenção',information:'🟡 Informação',ok:'🟢 OK'}[alert.severity] || escapeHtml(alert.severity)}</span> ${escapeHtml(alert.message)}</div>`).join('')}<h3>Ausências por coluna</h3>${table.column_analyses.filter(column => column.null_count).map(column => `<div class="relationship"><b>${escapeHtml(column.name)}</b>: ${column.null_count} (${column.null_pct}%) — ${escapeHtml(column.null_classification)}. Avalie se a ausência é esperada.</div>`).join('') || '<div class="subtle">Nenhum valor ausente detectado.</div>'}</div>`;
-  if (tab === 'keys') return `<div class="panel"><h3>Possíveis chaves — ${escapeHtml(table.name)}</h3>${table.key_candidates.length ? table.key_candidates.map(key => `<div class="relationship"><b>${key.columns.map(escapeHtml).join(' + ')}</b> · confiança ${escapeHtml(key.confidence)} · ${key.uniqueness_pct}% única${key.completeness_pct === undefined ? '' : ` · ${key.completeness_pct}% preenchida`}<div class="subtle">${key.reasons.map(escapeHtml).join(' · ')}</div></div>`).join('') : '<div class="subtle">Nenhuma chave candidata atendeu aos critérios atuais.</div>'}<p class="subtle">São sugestões heurísticas. Confira a regra de negócio antes de usar como chave.</p></div>`;
+  if (tab === 'keys') {
+    const labels = { strong_candidate: 'Candidato forte a identificador', possible_identifier: 'Possível identificador',
+      high_uniqueness_measure: 'Medida altamente única; não tratar como chave',
+      high_uniqueness_unconfirmed: 'Alta unicidade sem evidência semântica de chave' };
+    const highUnique = table.column_analyses.filter(column => labels[column.key_assessment]
+      && !['strong_candidate', 'possible_identifier'].includes(column.key_assessment));
+    return `<div class="panel"><h3>Possíveis identificadores — ${escapeHtml(table.name)}</h3>${table.key_candidates.length ? table.key_candidates.map(key => `<div class="relationship"><b>${key.columns.map(escapeHtml).join(' + ')}</b> · ${escapeHtml(labels[key.assessment] || 'Possível identificador')} · confiança ${escapeHtml(key.confidence)} · ${key.uniqueness_pct}% única${key.completeness_pct === undefined ? '' : ` · ${key.completeness_pct}% preenchida`}<div class="subtle">${key.reasons.map(escapeHtml).join(' · ')}</div></div>`).join('') : '<div class="subtle">Nenhuma coluna foi classificada como identificador candidato.</div>'}<h3>Alta unicidade sem evidência de chave</h3>${highUnique.length ? highUnique.map(column => `<div class="relationship"><b>${escapeHtml(column.name)}</b> · ${escapeHtml(labels[column.key_assessment])} · ${column.distinct_pct}% única<div class="subtle">${column.key_reasons.map(escapeHtml).join(' · ')}</div></div>`).join('') : '<div class="subtle">Nenhuma coluna nesta condição.</div>'}<p class="subtle">Unicidade isolada não comprova uma chave. Confira regras de negócio e contexto antes de usar como identificador.</p></div>`;
+  }
   if (tab === 'relationships') return `<div class="panel"><h3>Possíveis relacionamentos</h3>${report.relationships.length ? report.relationships.map(relation => `<div class="relationship"><b>${escapeHtml(relation.source_table)}.${escapeHtml(relation.source_column)}</b> → <b>${escapeHtml(relation.target_table)}.${escapeHtml(relation.target_column)}</b><div class="subtle">Possível ${escapeHtml(relation.cardinality)} · confiança ${escapeHtml(relation.confidence)} · cobertura ${relation.coverage_pct}% · ${relation.matched_values} correspondências · ${relation.unmatched_values} sem correspondência</div><div class="subtle">${escapeHtml(relation.reason)}</div></div>`).join('') : '<div class="subtle">Nenhum relacionamento provável identificado entre abas deste arquivo.</div>'}</div>`;
   if (tab === 'anomalies') return `<div class="panel"><h3>Anomalias estatísticas — ${escapeHtml(table.name)}</h3>${table.column_analyses.flatMap(column => column.anomalies).length ? table.column_analyses.flatMap(column => column.anomalies).map(anomaly => `<div class="relationship"><span class="pill">${escapeHtml(anomaly.severity)}</span> <b>${escapeHtml(anomaly.column)}</b>: ${anomaly.count} possíveis outliers pelo método ${escapeHtml(anomaly.method)}.<div class="subtle">${escapeHtml(anomaly.description)}</div></div>`).join('') : '<div class="subtle">Nenhuma anomalia estatística detectada pelas regras atuais.</div>'}</div>`;
   return `<div class="panel"><h3>Estatísticas agregadas — ${escapeHtml(table.name)}</h3>${table.column_analyses.map(column => `<div class="relationship"><b>${escapeHtml(column.name)}</b> (${escapeHtml(column.inferred_type)})<div class="subtle">${column.sensitive ? 'Estatísticas suprimidas por possível sensibilidade.' : escapeHtml(flattenStats(column.statistics).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'Sem estatísticas aplicáveis.')}</div></div>`).join('')}</div>`;

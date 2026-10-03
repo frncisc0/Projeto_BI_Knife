@@ -1,8 +1,10 @@
 import asyncio
+import json
 from io import BytesIO
 import logging
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError, FileValidationError
@@ -10,11 +12,48 @@ from app.analyzers.relationship_analyzer import suggest_relationships
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.report_service import report_payload
+from app.services.html_report_service import render_html_report
+from app.services.pdf_report_service import render_pdf_report
 from app.services.progress_tracker import create_analysis_job, get_analysis_job
 from starlette.datastructures import UploadFile as StoredUploadFile
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
+
+
+def _validate_report_payload(payload: dict) -> None:
+    """Bound local report generation and require the existing batch-result shape."""
+    try:
+        encoded_size = len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Formato do relatório inválido.") from exc
+    max_bytes = min(50 * 1024 * 1024, get_settings().report_max_bytes * max(1, get_settings().max_files_per_batch))
+    if encoded_size > max_bytes:
+        raise HTTPException(status_code=413, detail="O relatório é grande demais para exportação.")
+    if not isinstance(payload.get("results"), list):
+        raise HTTPException(status_code=400, detail="O resultado da análise não possui formato reconhecido.")
+
+
+@router.post("/report-html")
+def export_html_report(payload: dict = Body(...)) -> Response:
+    _validate_report_payload(payload)
+    content = render_html_report(payload)
+    return Response(content=content, media_type="text/html; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="bi-swiss-knife-relatorio.html"',
+                             "Cache-Control": "no-store"})
+
+
+@router.post("/report-pdf")
+def export_pdf_report(payload: dict = Body(...)) -> Response:
+    _validate_report_payload(payload)
+    try:
+        content = render_pdf_report(payload)
+    except ImportError as exc:
+        logger.error("PDF export dependency unavailable; error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Exportação PDF indisponível. Instale as dependências do projeto.") from exc
+    return Response(content=content, media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="bi-swiss-knife-relatorio-executivo.pdf"',
+                             "Cache-Control": "no-store"})
 
 
 def _validate_csv_options(delimiter: str, decimal_separator: str, header_mode: str) -> None:

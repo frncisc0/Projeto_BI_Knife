@@ -58,7 +58,7 @@ Use `BI_QUALITY_*` para configurar os limites e pesos do score de qualidade; os 
 - Configurações CSV para delimitador, separador decimal e cabeçalho, com detecção de encoding.
 - Quando a presença de cabeçalho CSV é ambígua, a interface pergunta se a primeira linha é cabeçalho ou dado; também é possível manter nomes genéricos.
 - Conteúdo potencialmente ativo em Excel é reportado sem execução; relações externas não são seguidas nem atualizadas. Abas legíveis continuam sendo analisadas quando macros, conexões ou objetos são detectados.
-- O relatório JSON estruturado é baixado automaticamente ao concluir a análise; CSV-resumo e HTML também ficam disponíveis nos botões de exportação.
+- O relatório JSON estruturado é baixado automaticamente ao concluir a análise; CSV-resumo, HTML offline expansível e PDF executivo local ficam disponíveis nos botões de exportação. HTML e PDF são derivados do resultado já calculado e não reabrem o arquivo fonte.
 - Campos com nomes que sugerem dados pessoais ou financeiros têm estatísticas suprimidas.
 - Interface em português e sem recursos externos obrigatórios.
 

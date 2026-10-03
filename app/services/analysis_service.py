@@ -1,6 +1,8 @@
 from datetime import datetime
 from hashlib import sha256
+import re
 import time
+import unicodedata
 import uuid
 from typing import Any, Callable
 
@@ -23,7 +25,13 @@ from app.models.analysis_models import Anomaly, AnalysisReport, ColumnAnalysis, 
 from app.security.file_validation import inspect_xlsx_package
 
 
-KEY_NAME_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número")
+KEY_NAME_TERMS = ("id", "codigo", "chave", "contrato", "numero", "matricula", "registro", "sku", "pedido", "processo")
+
+
+def _name_tokens(value: str) -> set[str]:
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    normalized = "".join(character for character in normalized if not unicodedata.combining(character))
+    return set(re.findall(r"[a-z0-9]+", normalized))
 
 
 def _clean(value: Any) -> Any:
@@ -45,17 +53,30 @@ def _cardinality(distinct: int, count: int) -> str:
     return "baixa" if ratio <= 0.05 else "média" if ratio <= 0.5 else "alta"
 
 
-def _key_info(name: str, complete_pct: float, unique_pct: float, sampled: bool) -> tuple[bool, str | None, list[str]]:
+def _key_info(name: str, complete_pct: float, unique_pct: float, sampled: bool,
+              inferred: str, role: str, table_name: str) -> tuple[bool, str | None, list[str], str]:
     reasons: list[str] = []
     if complete_pct < 95 or unique_pct < 95:
-        return False, None, reasons
+        return False, None, reasons, "not_candidate"
     reasons.append(f"{complete_pct:.1f}% preenchida")
     reasons.append(f"{unique_pct:.1f}% única")
-    name_match = any(term in name.casefold() for term in KEY_NAME_TERMS)
-    if name_match:
-        reasons.append("nome compatível com identificador")
-    confidence = "high" if complete_pct == 100 and unique_pct == 100 and not sampled else "medium"
-    return True, confidence, reasons
+    tokens = _name_tokens(name)
+    name_match = bool(tokens & set(KEY_NAME_TERMS)) or role in {"identifier", "code"}
+    table_tokens = _name_tokens(table_name)
+    entity_context = table_tokens & {"contrato", "cliente", "fornecedor", "colaborador", "funcionario",
+                                     "processo", "pedido", "fatura"}
+    if role == "measure" or inferred in {"moeda", "percentual"}:
+        reasons.append("coluna com natureza de medida; unicidade não comprova identificador")
+        return False, None, reasons, "high_uniqueness_measure"
+    if not name_match:
+        reasons.append("alta unicidade sem evidência semântica de identificador")
+        return False, None, reasons, "high_uniqueness_unconfirmed"
+    reasons.append("nome ou papel semântico compatível com identificador")
+    if entity_context:
+        reasons.append("contexto da aba indica entidade ou processo identificável")
+    strong = complete_pct == 100 and unique_pct == 100 and not sampled
+    confidence = "low" if sampled else "high" if strong else "medium"
+    return True, confidence, reasons, "strong_candidate" if strong else "possible_identifier"
 
 
 def _composite_keys(frame: pd.DataFrame, single_keys: set[str], sampled: bool) -> list[dict[str, Any]]:
@@ -65,6 +86,10 @@ def _composite_keys(frame: pd.DataFrame, single_keys: set[str], sampled: bool) -
     eligible = []
     for name in frame.columns:
         series = frame[name]
+        tokens = _name_tokens(str(name))
+        if tokens & {"custo", "risco", "valor", "preco", "salario",
+                     "receita", "margem", "rescisao", "despesa", "faturamento"}:
+            continue
         if series.notna().all() and series.nunique() / len(frame) >= 0.5:
             eligible.append(name)
     eligible = eligible[:12]
@@ -237,7 +262,8 @@ def analyze_file(
             confidence = type_confidence(series, inferred)
             private_reason, sensitivity_category, sensitivity_confidence = sensitivity_details(
                 str(column_name), series, physical_type(series), inferred, role, confidence)
-            candidate, key_confidence, key_reasons = _key_info(str(column_name), 100 - null_pct, distinct_pct, sampled)
+            candidate, key_confidence, key_reasons, key_assessment = _key_info(
+                str(column_name), 100 - null_pct, distinct_pct, sampled, inferred, role, str(table_name))
             null_label = null_band(null_pct)
             anomalies = [] if private_reason else numeric_anomalies(series, inferred, str(column_name))
             column_stats = {} if private_reason else statistics(series, inferred)
@@ -257,7 +283,8 @@ def analyze_file(
                 completeness_pct=round(100 - null_pct, 2), distinct_count=distinct_count,
                 distinct_pct=distinct_pct, cardinality=_cardinality(distinct_count, count),
                 duplicate_count=max(0, count - distinct_count), empty=bool(series.isna().all() or series.astype(str).str.strip().eq("").all()),
-                key_candidate=candidate, key_confidence=key_confidence, key_reasons=key_reasons,
+                key_candidate=candidate, key_assessment=key_assessment,
+                key_confidence=key_confidence, key_reasons=key_reasons,
                 inconsistent_values=invalid_count, invalid_dates=invalid_date_count(series, inferred),
                 zero_count=zero_count if not private_reason else None,
                 negative_count=negative_count if not private_reason else None,
@@ -272,7 +299,7 @@ def analyze_file(
                 single_keys.add(column_name)
                 key_candidates.append({"columns": [column_name], "confidence": key_confidence,
                                        "uniqueness_pct": distinct_pct, "completeness_pct": 100 - null_pct,
-                                       "reasons": key_reasons})
+                                       "assessment": key_assessment, "reasons": key_reasons})
             all_anomalies.extend(anomalies)
 
         key_candidates.extend(_composite_keys(frame, single_keys, sampled))

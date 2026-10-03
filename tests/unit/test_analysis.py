@@ -80,3 +80,16 @@ def test_iqr_anomaly_is_explainable_and_does_not_include_outlier_value():
     assert anomaly.method == "IQR"
     assert anomaly.count == 1
     assert "500" not in anomaly.model_dump_json()
+
+
+def test_unique_measures_are_not_key_candidates_but_contract_id_is():
+    report = analyze_file(
+        "keys.csv", "csv",
+        b"Contrato,Custo de Rescisao,Risco Total\nA-001,100,500\nA-002,200,600\nA-003,300,700\n",
+        "utf-8", header_mode="true")
+    columns = {column.name: column for column in report.tables[0].column_analyses}
+    assert columns["Contrato"].key_candidate is True
+    assert columns["Contrato"].key_assessment == "strong_candidate"
+    for name in ("Custo de Rescisao", "Risco Total"):
+        assert columns[name].key_candidate is False
+        assert columns[name].key_assessment == "high_uniqueness_measure"
