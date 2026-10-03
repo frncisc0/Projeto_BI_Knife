@@ -34,6 +34,8 @@ class ColumnAnalysis(BaseModel):
     type_reason: str
     sensitive: bool = False
     sensitivity_reason: str | None = None
+    sensitivity_category: str | None = None
+    sensitivity_confidence: Literal["low", "medium", "high"] = "low"
     value_count: int
     null_count: int
     null_pct: float
@@ -93,12 +95,17 @@ class FileSecurityAnalysis(BaseModel):
 
 class TableAnalysis(BaseModel):
     name: str
-    status: Literal["completed", "failed"] = "completed"
+    status: Literal["completed", "completed_empty", "partial", "skipped", "error", "failed"] = "completed"
     error_message: str | None = None
     header_row_used: int | None = None
+    header_detection: dict[str, Any] = Field(default_factory=dict)
     rows: int
+    rows_available: int = 0
     rows_analyzed: int
     sampled: bool
+    sampling_method: str = "none"
+    rows_empty: int = 0
+    trailing_empty_rows: int = 0
     columns: int
     columns_analyzed: int
     empty_rows: int

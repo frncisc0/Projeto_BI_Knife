@@ -124,6 +124,87 @@ def test_xlsx_combined_profile_cell_limit_is_shared_across_sheets(monkeypatch):
     assert report.settings["max_xlsx_profile_cells"] == 4
 
 
+def test_xlsx_header_after_title_and_inflated_used_range_excludes_trailing_rows():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Risco"
+    sheet.merge_cells("A1:E1")
+    sheet["A1"] = "Relatório de risco trabalhista"
+    sheet.append([])
+    sheet.append(["Empresa Parceira", "Contrato", "Fornecedor", "Valor", "Data"])
+    sheet.append(["Empresa A", "C-1", "Fornecedor A", 100, "2026-01-01"])
+    sheet.append([None, None, None, None, None])
+    sheet.append(["Empresa B", "C-2", "Fornecedor B", 200, "2026-01-02"])
+    sheet["A10000"].number_format = "@"
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    report = analyze_file("used-range.xlsx", "xlsx", buffer.getvalue())
+    table = report.tables[0]
+
+    assert table.header_row_used == 3
+    assert table.header_detection["status"] == "detected"
+    assert table.header_detection["header_source"] == "worksheet"
+    assert [column.name for column in table.column_analyses] == [
+        "Empresa Parceira", "Contrato", "Fornecedor", "Valor", "Data",
+    ]
+    assert table.rows_available == table.rows == 2
+    assert table.rows_analyzed == 2
+    assert table.rows_empty == 1
+    assert table.trailing_empty_rows >= 9990
+    assert table.empty_rows == 1
+    assert table.status == "completed"
+
+
+def test_xlsx_without_reliable_header_generates_names_but_keeps_all_rows():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append([1001, 42])
+    sheet.append([1002, 43])
+    sheet.append([1003, 44])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    table = analyze_file("headerless.xlsx", "xlsx", buffer.getvalue()).tables[0]
+    assert table.header_detection["status"] == "generated"
+    assert table.header_detection["header_source"] == "generated"
+    assert table.header_row_used is None
+    assert [column.name for column in table.column_analyses] == ["Coluna 1", "Coluna 2"]
+    assert table.rows_available == table.rows_analyzed == 3
+
+
+def test_xlsx_empty_worksheet_is_completed_empty_not_completed_with_zero_rows():
+    workbook = Workbook()
+    workbook.active.title = "Vazia"
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    table = analyze_file("empty-sheet.xlsx", "xlsx", buffer.getvalue()).tables[0]
+    assert table.status == "completed_empty"
+    assert table.rows_available == table.rows_analyzed == 0
+
+
+def test_xlsx_sampling_uses_nonempty_rows_and_reports_method(monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "sample_size", 4)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["id", "valor"])
+    for row in range(1, 21):
+        sheet.append([row, row * 10])
+    sheet["A10000"].number_format = "@"
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    table = analyze_file("sampled-bounds.xlsx", "xlsx", buffer.getvalue()).tables[0]
+    assert table.rows_available == 20
+    assert table.rows_analyzed == 4
+    assert table.sampled is True
+    assert table.sampling_method == "uniform_reservoir"
+    assert table.trailing_empty_rows >= 9970
+
+
 def _add_xlsx_parts(content: bytes, parts: dict[str, bytes], stored_parts: set[str] | None = None) -> bytes:
     output = BytesIO()
     with zipfile.ZipFile(BytesIO(content)) as original, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as updated:
@@ -199,7 +280,9 @@ def test_formula_is_not_recalculated_or_included_as_cell_content():
     output = json.dumps(report.model_dump(mode="json"), ensure_ascii=False)
 
     assert report.security.formulas_action == "cached_values_only"
-    assert report.tables[0].column_analyses[0].null_count == 1
+    assert report.tables[0].status == "completed_empty"
+    assert report.tables[0].rows_analyzed == 0
+    assert report.tables[0].column_analyses[0].name == "formula_result"
     assert "HYPERLINK" not in output
     assert "example.invalid" not in output
 

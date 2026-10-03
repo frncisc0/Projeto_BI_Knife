@@ -1,3 +1,5 @@
+import asyncio
+from io import BytesIO
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -8,6 +10,8 @@ from app.analyzers.relationship_analyzer import suggest_relationships
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.report_service import report_payload
+from app.services.progress_tracker import create_analysis_job, get_analysis_job
+from starlette.datastructures import UploadFile as StoredUploadFile
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -112,6 +116,17 @@ async def analyze_batch(
     header_mode: str = Form("auto"),
 ) -> dict:
     """Analyze multiple local uploads independently and retain per-file errors."""
+    return await _analyze_batch_impl(uploads, csv_delimiter, decimal_separator, header_mode)
+
+
+async def _analyze_batch_impl(
+    uploads: list[UploadFile],
+    csv_delimiter: str,
+    decimal_separator: str,
+    header_mode: str,
+    progress_callback=None,
+) -> dict:
+    """Shared batch implementation for synchronous and progress-job routes."""
     settings = get_settings()
     try:
         _validate_csv_options(csv_delimiter, decimal_separator, header_mode)
@@ -137,6 +152,10 @@ async def analyze_batch(
     try:
         for upload_index, upload in enumerate(uploads):
             filename = display_filename(upload.filename)
+            if progress_callback:
+                progress_callback({"stage": "validating", "current_file": upload_index + 1,
+                                   "total_files": len(uploads), "filename": filename,
+                                   "message": f"Validando arquivo {upload_index + 1} de {len(uploads)}"})
             is_csv_upload = (upload.filename or "").casefold().endswith(".csv")
             budget_share = relationship_remaining // max(1, csv_uploads_remaining) if is_csv_upload else 0
             file_relationship_budget = [budget_share] if is_csv_upload else None
@@ -149,13 +168,22 @@ async def analyze_batch(
             try:
                 content = await _read_upload(upload, file_limit, batch_limit - batch_bytes, settings.max_batch_size_mb)
                 batch_bytes += len(content)
+                if progress_callback:
+                    progress_callback({"stage": "security", "current_file": upload_index + 1,
+                                       "total_files": len(uploads), "filename": filename,
+                                       "message": "Verificando a segurança do arquivo"})
                 safe_name, file_type, encoding, security = validate_upload_detailed(upload.filename, content)
+                def report_progress(event: dict) -> None:
+                    if progress_callback:
+                        progress_callback({**event, "current_file": upload_index + 1,
+                                           "total_files": len(uploads), "filename": filename,
+                                           "file_type": file_type})
                 analysis = analyze_file(filename or safe_name, file_type, content, encoding,
                                         csv_delimiter, decimal_separator, header_mode,
                                         relationship_frames=relationship_frames,
                                         relationship_budget=file_relationship_budget,
                                         relationship_prefix=f"{upload_index}:{filename or safe_name}",
-                                        security_metadata=security)
+                                        security_metadata=security, progress_callback=report_progress)
                 results.append({"filename": filename or safe_name, "analysis": report_payload(analysis), "error": None})
             except FileValidationError as exc:
                 results.append({"filename": filename, "analysis": None, "error": str(exc)})
@@ -197,6 +225,9 @@ async def analyze_batch(
         for table in report["tables"]:
             _apply_integrity_quality(table["quality"], report["settings"], integrity)
     relationship_frames.clear()
+    if progress_callback:
+        progress_callback({"stage": "finalizing", "current_file": len(uploads),
+                           "total_files": len(uploads), "message": "Finalizando relatório e relacionamentos"})
     return {"results": results, "file_count": len(results), "total_bytes": batch_bytes,
             "relationships": [
                 {**relation.model_dump(mode="json"),
@@ -204,3 +235,60 @@ async def analyze_batch(
                  "target_table": relation.target_table.split(":", 1)[1]}
                 for relation in relationships
             ]}
+
+
+@router.post("/analyze-progress")
+async def start_analysis_with_progress(
+    uploads: list[UploadFile] = File(...),
+    csv_delimiter: str = Form("auto"),
+    decimal_separator: str = Form("auto"),
+    header_mode: str = Form("auto"),
+) -> dict[str, str]:
+    """Accept local uploads and start a background job whose polling state follows backend work."""
+    settings = get_settings()
+    try:
+        _validate_csv_options(csv_delimiter, decimal_separator, header_mode)
+    except FileValidationError as exc:
+        for upload in uploads:
+            await upload.close()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Selecione pelo menos um arquivo.")
+    if len(uploads) > settings.max_files_per_batch:
+        for upload in uploads:
+            await upload.close()
+        raise HTTPException(status_code=400, detail=f"Selecione no máximo {settings.max_files_per_batch} arquivos por vez.")
+    batch_limit = settings.max_batch_size_mb * 1024 * 1024
+    file_limit = settings.max_file_size_mb * 1024 * 1024
+    stored_files: list[tuple[str, bytes]] = []
+    total_bytes = 0
+    try:
+        for upload in uploads:
+            content = await _read_upload(upload, file_limit, batch_limit - total_bytes, settings.max_batch_size_mb)
+            total_bytes += len(content)
+            stored_files.append((upload.filename or "arquivo", content))
+    except FileValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        for upload in uploads:
+            await upload.close()
+
+    async def run_batch(progress_callback):
+        stored_uploads = [StoredUploadFile(filename=name, file=BytesIO(content)) for name, content in stored_files]
+        return await _analyze_batch_impl(stored_uploads, csv_delimiter, decimal_separator, header_mode,
+                                         progress_callback=progress_callback)
+
+    def worker(progress_callback):
+        return asyncio.run(run_batch(progress_callback))
+
+    job_id = create_analysis_job(display_filename(uploads[0].filename) if uploads else "",
+                                 len(stored_files), worker)
+    return {"job_id": job_id, "status": "running"}
+
+
+@router.get("/analyze-jobs/{job_id}/progress")
+def analysis_progress(job_id: str) -> dict:
+    job = get_analysis_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Análise não encontrada ou expirada.")
+    return job

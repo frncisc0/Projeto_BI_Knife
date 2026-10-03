@@ -4,6 +4,7 @@ const drop = document.querySelector('#drop-zone');
 const button = document.querySelector('#analyze-button');
 const statusEl = document.querySelector('#status');
 const resultEl = document.querySelector('#results');
+const progressCard = document.querySelector('#analysis-progress');
 const maxFiles = 50;
 let selectedFiles = [];
 const relativePaths = new WeakMap();
@@ -142,7 +143,7 @@ button.addEventListener('click', async () => {
   button.textContent = 'Analisando…';
   showStatus(`Analisando ${filesToAnalyze.length} arquivo(s) localmente. A duração depende do tamanho dos dados.`);
   try {
-    const payload = await submitBatch(filesToAnalyze, common);
+    const payload = await submitBatchWithProgress(filesToAnalyze, common);
     if (common.header_mode === 'auto') await resolveAmbiguousHeaders(payload, common, filesToAnalyze);
     renderBatch(payload);
     const succeeded = payload.results.filter(item => item.analysis && item.analysis.status !== 'failed').length;
@@ -159,14 +160,57 @@ button.addEventListener('click', async () => {
   }
 });
 
-async function submitBatch(files, options) {
+async function submitBatchWithProgress(files, options) {
+  progressCard.hidden = false;
+  updateProgress({ progress: 0, stage: 'initializing', message: 'Preparando envio local', status: 'running',
+    filename: files.length === 1 ? fileLabel(files[0]) : files.length + ' arquivos',
+    elapsed_seconds: 0, estimated_remaining_seconds: null });
   const data = new FormData();
   files.forEach(file => data.append('uploads', file, fileLabel(file)));
   Object.entries(options).forEach(([key, value]) => data.append(key, value));
-  const response = await fetch('/api/analyze-batch', { method: 'POST', body: data });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.detail || 'Falha ao analisar os arquivos.');
-  return payload;
+  const response = await fetch('/api/analyze-progress', { method: 'POST', body: data });
+  const job = await response.json();
+  if (!response.ok) throw new Error(job.detail || 'Falha ao iniciar a análise.');
+  while (true) {
+    const progressResponse = await fetch('/api/analyze-jobs/' + encodeURIComponent(job.job_id) + '/progress');
+    const state = await progressResponse.json();
+    if (!progressResponse.ok) throw new Error(state.detail || 'Não foi possível consultar o progresso.');
+    updateProgress(state);
+    if (state.status === 'completed') {
+      if (!state.result) throw new Error('A análise terminou sem um relatório.');
+      return state.result;
+    }
+    if (state.status === 'error') throw new Error(state.message || 'Não foi possível concluir a análise.');
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+}
+
+function formatDuration(seconds) {
+  const value = Math.max(0, Math.floor(Number(seconds) || 0));
+  return String(Math.floor(value / 60)).padStart(2, '0') + ':' + String(value % 60).padStart(2, '0');
+}
+
+function updateProgress(state) {
+  const progress = Math.max(0, Math.min(100, Number(state.progress) || 0));
+  document.querySelector('#progress-bar').value = progress;
+  document.querySelector('#progress-percent').textContent = progress + '%';
+  document.querySelector('#progress-title').textContent =
+    state.status === 'completed' ? 'Análise concluída' : state.status === 'error' ? 'Falha na análise' : 'Analisando arquivo';
+  document.querySelector('#progress-filename').textContent = state.filename || '';
+  document.querySelector('#progress-stage').textContent = state.message || state.stage || 'Processando';
+  const sheetText = state.file_type === 'csv'
+    ? (state.records_scanned != null ? Number(state.records_scanned).toLocaleString('pt-BR') + ' registros contados' : '')
+    : state.total_sheets
+    ? 'Aba ' + Math.min(state.current_sheet || 1, state.total_sheets) + ' de ' + state.total_sheets
+      + (state.current_sheet_name ? ' — ' + state.current_sheet_name : '')
+      + (state.rows_available != null ? ' · ' + Number(state.rows_available).toLocaleString('pt-BR') + ' linhas disponíveis' : '')
+    : (state.total_files > 1 ? 'Arquivo ' + (state.current_file || 1) + ' de ' + state.total_files : '');
+  document.querySelector('#progress-sheets').textContent = sheetText;
+  document.querySelector('#progress-elapsed').textContent = formatDuration(state.elapsed_seconds);
+  const remaining = state.estimated_remaining_seconds;
+  document.querySelector('#progress-remaining').textContent = state.status === 'completed'
+    ? '00:00' : remaining == null ? 'Calculando...' : '~' + formatDuration(remaining);
+  progressCard.dataset.status = state.status || 'running';
 }
 
 function chooseHeader(filename) {
@@ -185,7 +229,7 @@ async function resolveAmbiguousHeaders(batch, options, files) {
     const choice = await chooseHeader(item.filename);
     if (choice === null) continue;
     const file = files[index];
-    const corrected = await submitBatch([file], { ...options, header_mode: choice });
+    const corrected = await submitBatchWithProgress([file], { ...options, header_mode: choice });
     if (corrected.results[0]?.analysis) item.analysis = corrected.results[0].analysis;
     else item.error = corrected.results[0]?.error || 'Não foi possível reanalisar com a escolha informada.';
   }
@@ -326,9 +370,9 @@ function flattenStats(stats, prefix = '') {
 }
 
 function tabContent(tab, report, table) {
-  if (table.status === 'failed') return `<div class="panel"><h3>Aba não processada — ${escapeHtml(table.name)}</h3><p>${escapeHtml(table.error_message || 'A leitura desta aba falhou.')}</p><p class="subtle">As outras abas legíveis continuam disponíveis no relatório.</p></div>`;
+  if (['failed', 'error', 'skipped'].includes(table.status)) return `<div class="panel"><h3>Aba não processada — ${escapeHtml(table.name)}</h3><p>${escapeHtml(table.error_message || 'A leitura desta aba não foi concluída.')}</p><p class="subtle">As outras abas legíveis continuam disponíveis no relatório.</p></div>`;
   if (tab === 'summary') return `<div class="panel"><h3>Diagnóstico do arquivo</h3><p>Qualidade geral: <b>${escapeHtml(report.quality.classification)}</b> (${report.quality.score}/100), segundo as faixas e pesos configurados.</p>${renderQualityDimensions(report.quality)}${qualityReasons(report.quality)}${qualityColumnHints(report.tables)}<p class="subtle">${report.tables.some(item => item.sampled) ? 'Alguns indicadores foram calculados sobre amostra limitada; consulte os avisos.' : 'As tabelas foram perfiladas sem amostragem.'}</p></div><div class="panel">${renderTableSummary(report.tables)}</div>`;
-  if (tab === 'structure') return `<div class="panel"><h3>${escapeHtml(table.name)} — ${escapeHtml(table.table_type)}</h3><p>${escapeHtml(table.table_type_reason)} Confiança: ${escapeHtml(table.table_type_confidence)}.</p><p>${table.rows.toLocaleString('pt-BR')} linhas identificadas; ${table.rows_analyzed.toLocaleString('pt-BR')} perfiladas${table.sampled ? ' (amostra)' : ''}; ${table.columns} colunas, ${table.empty_rows} linhas vazias na área perfilada, ${table.empty_columns} colunas vazias e ${table.duplicate_rows} linhas duplicadas.</p>${table.sampled ? '<div class="warning">Indicadores calculados sobre amostra; contagens observadas na amostra podem diferir do arquivo completo.</div>' : ''}</div><div class="panel">${renderTableSummary([table])}</div>`;
+  if (tab === 'structure') return '<div class="panel"><h3>' + escapeHtml(table.name) + ' — ' + escapeHtml(table.table_type) + '</h3><p>' + escapeHtml(table.table_type_reason) + ' Confiança: ' + escapeHtml(table.table_type_confidence) + '.</p><p>Status: ' + escapeHtml(table.status) + ' · cabeçalho ' + escapeHtml(table.header_detection?.status || 'não informado') + (table.header_row_used ? ', linha ' + table.header_row_used : '') + ' (' + escapeHtml(table.header_detection?.header_source || '—') + ').</p><p>' + Number(table.rows_available ?? table.rows).toLocaleString('pt-BR') + ' linhas disponíveis; ' + table.rows_analyzed.toLocaleString('pt-BR') + ' analisadas; ' + Number(table.rows_empty || 0).toLocaleString('pt-BR') + ' vazias internas; ' + Number(table.trailing_empty_rows || 0).toLocaleString('pt-BR') + ' vazias finais; sampling ' + (table.sampled ? escapeHtml(table.sampling_method || 'sim') : 'não') + '.</p><p>' + table.columns + ' colunas; ' + table.empty_columns + ' colunas vazias e ' + table.duplicate_rows + ' linhas duplicadas na amostra.</p>' + (table.sampled ? '<div class="warning">Indicadores calculados sobre amostra uniforme dos registros preenchidos.</div>' : '') + '</div><div class="panel">' + renderTableSummary([table]) + '</div>';
   if (tab === 'columns') return `<div class="panel"><h3>Perfil e tipo provável de cada coluna</h3><div class="scroll"><table><thead><tr><th>COLUNA</th><th>PAPEL SEMÂNTICO</th><th>TIPO INFERIDO</th><th>TIPO FÍSICO</th><th>CONFIANÇA / MOTIVO</th><th>VALORES</th><th>NULOS</th><th>PREENCHIDO</th><th>ÚNICOS</th><th>CARDINALIDADE</th><th>REPETIDOS</th><th>INVÁLIDOS</th><th>ZEROS</th><th>NEGATIVOS</th><th>ESTATÍSTICAS AGREGADAS</th></tr></thead><tbody>${table.column_analyses.map(column => `<tr><td>${escapeHtml(column.name)}${column.sensitive ? '<div class="subtle">Estatísticas suprimidas por possível sensibilidade</div>' : ''}</td><td>${escapeHtml(column.semantic_role || 'unknown')} (${escapeHtml(column.semantic_role_confidence || 'low')})</td><td>${escapeHtml(column.inferred_type)}</td><td>${escapeHtml(column.physical_type || column.original_type)}</td><td>${escapeHtml(column.confidence)}<div class="subtle">${escapeHtml(column.type_reason)}</div></td><td>${column.value_count.toLocaleString('pt-BR')}</td><td>${column.null_count} (${column.null_pct}%)<div class="subtle">${escapeHtml(column.null_classification)}; avalie se a ausência é esperada.</div></td><td>${column.completeness_pct}%</td><td>${column.distinct_count} (${column.distinct_pct}%)</td><td>${escapeHtml(column.cardinality)}</td><td>${column.duplicate_count}</td><td>${column.inconsistent_values}</td><td>${column.zero_count ?? '—'}</td><td>${column.negative_count ?? '—'}</td><td>${escapeHtml(flattenStats(column.statistics).map(([key, value]) => `${key}: ${value}`).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div></div>`;
   if (tab === 'quality') return `<div class="panel"><h3>Qualidade — ${escapeHtml(table.name)}</h3><p><b>${escapeHtml(table.quality.classification)}</b> · ${table.quality.score}/100</p>${renderQualityDimensions(table.quality)}${qualityColumnHints([table])}${table.quality.alerts.map(alert => `<div class="relationship"><span class="pill severity-${escapeHtml(alert.severity)}">${{critical:'🔴 Crítico',attention:'🟠 Atenção',information:'🟡 Informação',ok:'🟢 OK'}[alert.severity] || escapeHtml(alert.severity)}</span> ${escapeHtml(alert.message)}</div>`).join('')}<h3>Ausências por coluna</h3>${table.column_analyses.filter(column => column.null_count).map(column => `<div class="relationship"><b>${escapeHtml(column.name)}</b>: ${column.null_count} (${column.null_pct}%) — ${escapeHtml(column.null_classification)}. Avalie se a ausência é esperada.</div>`).join('') || '<div class="subtle">Nenhum valor ausente detectado.</div>'}</div>`;
   if (tab === 'keys') return `<div class="panel"><h3>Possíveis chaves — ${escapeHtml(table.name)}</h3>${table.key_candidates.length ? table.key_candidates.map(key => `<div class="relationship"><b>${key.columns.map(escapeHtml).join(' + ')}</b> · confiança ${escapeHtml(key.confidence)} · ${key.uniqueness_pct}% única${key.completeness_pct === undefined ? '' : ` · ${key.completeness_pct}% preenchida`}<div class="subtle">${key.reasons.map(escapeHtml).join(' · ')}</div></div>`).join('') : '<div class="subtle">Nenhuma chave candidata atendeu aos critérios atuais.</div>'}<p class="subtle">São sugestões heurísticas. Confira a regra de negócio antes de usar como chave.</p></div>`;
@@ -338,5 +382,5 @@ function tabContent(tab, report, table) {
 }
 
 function renderTableSummary(tables) {
-  return `<div class="scroll"><table><thead><tr><th>TABELA/ABA</th><th>STATUS</th><th>TIPO SUGERIDO</th><th>LINHAS</th><th>COLUNAS</th><th>VAZIAS</th><th>DUPLICADAS</th><th>QUALIDADE</th></tr></thead><tbody>${tables.map(table => `<tr><td>${escapeHtml(table.name)}</td><td>${escapeHtml(table.status || 'completed')}${table.error_message ? `<div class="subtle">${escapeHtml(table.error_message)}</div>` : ''}</td><td>${escapeHtml(table.table_type)}</td><td>${table.rows.toLocaleString('pt-BR')}${table.sampled ? ` <span class="subtle">(amostra ${table.rows_analyzed.toLocaleString('pt-BR')})</span>` : ''}</td><td>${table.columns}</td><td>${table.empty_rows} linhas / ${table.empty_columns} colunas</td><td>${table.duplicate_rows}</td><td>${escapeHtml(table.quality.classification)} (${table.quality.score})</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="scroll"><table><thead><tr><th>WORKSHEET</th><th>STATUS</th><th>CABEÇALHO</th><th>LINHAS DISPONÍVEIS / ANALISADAS</th><th>VAZIAS INTERNAS / FINAIS</th><th>AMOSTRAGEM</th><th>COLUNAS</th><th>QUALIDADE</th></tr></thead><tbody>${tables.map(table => `<tr><td>${escapeHtml(table.name)}</td><td>${escapeHtml(table.status || 'completed')}${table.error_message ? `<div class="subtle">${escapeHtml(table.error_message)}</div>` : ''}</td><td>${escapeHtml(table.header_detection?.status || '—')}${table.header_row_used ? `<div class="subtle">linha ${table.header_row_used} · ${escapeHtml(table.header_detection?.header_source || 'worksheet')}</div>` : ''}</td><td>${Number(table.rows_available ?? table.rows).toLocaleString('pt-BR')} / ${Number(table.rows_analyzed).toLocaleString('pt-BR')}</td><td>${Number(table.rows_empty || table.empty_rows || 0).toLocaleString('pt-BR')} / ${Number(table.trailing_empty_rows || 0).toLocaleString('pt-BR')}</td><td>${table.sampled ? escapeHtml(table.sampling_method || 'uniforme') : 'não'}</td><td>${table.columns} (${table.columns_analyzed} analisadas)</td><td>${escapeHtml(table.quality.classification)} (${table.quality.score})</td></tr>`).join('')}</tbody></table></div>`;
 }

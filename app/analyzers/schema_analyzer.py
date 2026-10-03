@@ -1,33 +1,43 @@
 import re
+import unicodedata
 
 import pandas as pd
 from app.analyzers.statistics_analyzer import numeric_values
 
 
 IDENTIFIER_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número", "cpf", "cnpj")
-SENSITIVE_TERMS = (
-    "cpf", "cnpj", "email", "e-mail", "telefone", "celular", "phone", "endereco", "endereço",
-    "nome", "name", "salario", "salário", "salary", "wage", "payroll", "payment", "banco", "bank",
-    "conta", "account", "iban", "routing", "creditcard", "agencia", "agência", "birth", "nascimento", "nasc",
-    "dob", "ssn", "national_id",
-)
+SENSITIVE_NAME_CATEGORIES = {
+    "cpf": {"cpf"}, "cnpj": {"cnpj"}, "telefone": {"telefone", "celular", "phone", "mobile"},
+    "email": {"email", "mail"}, "rg": {"rg"}, "documento": {"documento", "document", "national_id", "ssn"},
+}
+
+
+def sensitivity_details(column_name: str, series: pd.Series | None = None, physical: str | None = None,
+                        inferred: str | None = None, role: str | None = None,
+                        confidence: str | None = None) -> tuple[str | None, str | None, str]:
+    normalized = unicodedata.normalize("NFKD", column_name.casefold())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    tokens = set(re.findall(r"[a-z0-9]+", normalized))
+    for category, terms in SENSITIVE_NAME_CATEGORIES.items():
+        if tokens & terms:
+            return f"O nome da coluna identifica diretamente um dado pessoal ({category}).", category, "high"
+    # Content-pattern detection is limited to e-mail text. Numeric formatting alone
+    # cannot distinguish phone/document identifiers from amounts, ranks, or scores.
+    if (series is not None and physical == "string" and inferred in {"categórico", "texto"}
+            and role in {"text", "category", "unknown"}):
+        sample = series.dropna().astype(str).str.strip().head(1000)
+        if len(sample) >= 2:
+            match_rate = sample.str.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", case=False).mean()
+            if match_rate >= 0.8:
+                pattern_confidence = "high" if match_rate >= 0.95 and len(sample) >= 5 and confidence == "high" else "medium"
+                return "Os valores de texto têm formato consistente de e-mail.", "email", pattern_confidence
+    return None, None, "low"
 
 
 def sensitive_reason(column_name: str, series: pd.Series | None = None) -> str | None:
-    normalized = column_name.casefold()
-    matched = next((term for term in SENSITIVE_TERMS if term in normalized), None)
-    if matched:
-        return f"O nome da coluna sugere dado pessoal ou financeiro ({matched})."
-    if series is not None:
-        sample = series.dropna().astype(str).head(1000)
-        patterns = {
-            "e-mail": sample.str.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", case=False),
-            "CPF/CNPJ/telefone": sample.str.fullmatch(r"\+?[\d().\s-]{10,20}"),
-        }
-        detected = next((label for label, matches in patterns.items() if len(matches) and matches.mean() >= 0.5), None)
-        if detected:
-            return f"Os formatos observados na amostra podem conter {detected}; as estatísticas foram suprimidas."
-    return None
+    return sensitivity_details(column_name, series, physical_type(series) if series is not None else None,
+                               infer_type(series, column_name) if series is not None else None,
+                               None, None)[0]
 
 
 def infer_type(series: pd.Series, column_name: str = "") -> str:

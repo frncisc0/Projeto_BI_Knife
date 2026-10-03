@@ -38,6 +38,26 @@ def test_sensitive_header_names_remain_visible_and_cell_values_are_suppressed():
     assert all(secret not in payload for secret in secrets)
 
 
+def test_sensitivity_requires_identifier_context_and_ignores_numeric_measures():
+    header = "CPF,CNPJ,Telefone,Email,RG,Documento,Celular,Data,Pontos,Rank,Previous Points,Valor,FGTS,Custo Folha,Salário"
+    rows = [
+        f"12345678901,12345678000190,5511999991234,pessoa{i}@example.test,1234567,123456789,"
+        f"5511888881234,2026-01-0{i + 1},{i * 3},"
+        f"{i + 1},{i * 2},{i * 100},1200,45000,{i * 8000}"
+        for i in range(1, 6)
+    ]
+    report = analyze_file("sensitivity.csv", "csv", (header + "\n" + "\n".join(rows) + "\n").encode(),
+                         "utf-8", header_mode="true")
+    columns = {column.name: column for column in report.tables[0].column_analyses}
+    assert {name: columns[name].sensitivity_category for name in ("CPF", "CNPJ", "Telefone", "Email", "RG", "Documento", "Celular")} == {
+        "CPF": "cpf", "CNPJ": "cnpj", "Telefone": "telefone", "Email": "email",
+        "RG": "rg", "Documento": "documento", "Celular": "telefone",
+    }
+    for name in ("Data", "Pontos", "Rank", "Previous Points", "Valor", "FGTS", "Custo Folha", "Salário"):
+        assert not columns[name].sensitive, name
+        assert columns[name].sensitivity_confidence == "low"
+
+
 def test_numeric_text_reports_physical_type_and_conservative_semantic_role():
     report = analyze_file("numeric-text.csv", "csv", b"measure\n10.5\n20.5\n30.5\n40.5\ntexto\n", "utf-8", header_mode="true")
     column = report.tables[0].column_analyses[0]

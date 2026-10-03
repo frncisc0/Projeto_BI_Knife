@@ -2,7 +2,7 @@ from datetime import datetime
 from hashlib import sha256
 import time
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -15,7 +15,7 @@ from app.analyzers.quality_analyzer import (
     numeric_anomalies,
 )
 from app.analyzers.relationship_analyzer import suggest_relationships
-from app.analyzers.schema_analyzer import infer_type, physical_type, sensitive_reason, semantic_role, type_confidence, type_reason
+from app.analyzers.schema_analyzer import infer_type, physical_type, sensitivity_details, semantic_role, type_confidence, type_reason
 from app.analyzers.statistics_analyzer import statistics
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError
@@ -159,12 +159,16 @@ def analyze_file(
     relationship_budget: list[int] | None = None,
     relationship_prefix: str = "",
     security_metadata: dict[str, Any] | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> AnalysisReport:
     started = time.monotonic()
     if file_type in {"xlsx", "xlsm"} and security_metadata is None:
         security_metadata = inspect_xlsx_package(content)
+    if progress_callback:
+        progress_callback({"stage": "opening_workbook" if file_type in {"xlsx", "xlsm"} else "file_reading",
+                           "message": "Abrindo arquivo para leitura segura"})
     frames = read_tables(content, file_type, csv_encoding, csv_delimiter, decimal_separator, header_mode,
-                         security_metadata=security_metadata)
+                         security_metadata=security_metadata, on_progress=progress_callback)
     settings = get_settings()
     tables: list[TableAnalysis] = []
     warnings: list[str] = []
@@ -175,11 +179,17 @@ def analyze_file(
         if time.monotonic() - started > settings.analysis_timeout_seconds:
             raise AnalysisError("A análise excedeu o tempo máximo configurado.")
         metadata = dict(frame.attrs)
-        if metadata.get("worksheet_status") == "failed":
-            reason = str(metadata.get("worksheet_error", "Esta aba não pôde ser lida."))
+        if metadata.get("worksheet_status") in {"failed", "error", "skipped"}:
+            reason = str(metadata.get("worksheet_error") or "Esta aba não pôde ser lida.")
+            table_status = metadata.get("worksheet_status", "error")
             tables.append(TableAnalysis(
-                name=table_name, status="failed", error_message=reason,
-                rows=0, rows_analyzed=0, sampled=False, columns=0, columns_analyzed=0,
+                name=table_name, status=table_status, error_message=reason,
+                rows=int(metadata.get("rows_available", 0)), rows_available=int(metadata.get("rows_available", 0)),
+                rows_analyzed=0, sampled=False, columns=int(metadata.get("columns_total", 0)),
+                columns_analyzed=0, header_row_used=metadata.get("header_row_used"),
+                header_detection=metadata.get("header_detection", {}),
+                rows_empty=int(metadata.get("rows_empty", 0)),
+                trailing_empty_rows=int(metadata.get("trailing_empty_rows", 0)), sampling_method="none",
                 empty_rows=0, empty_columns=0, duplicate_rows=0,
                 table_type="não analisada", table_type_confidence="low",
                 table_type_reason="A leitura desta aba falhou; nenhuma conclusão estrutural foi produzida.",
@@ -200,11 +210,11 @@ def analyze_file(
                 normalized_names.append(label if repeated[label] == 1 else f"{label} ({repeated[label]})")
         frame.columns = normalized_names
         rows_analyzed = len(frame)
-        rows_total = int(metadata.get("total_rows", rows_analyzed))
+        rows_total = int(metadata.get("rows_available", metadata.get("total_rows", rows_analyzed)))
         sampled = bool(metadata.get("sampled", rows_total > rows_analyzed))
         columns_total = int(metadata.get("columns_total", len(original_column_names)))
         empty_row_mask = frame.isna().all(axis=1) if len(frame.columns) else pd.Series(False, index=frame.index)
-        empty_rows = int(empty_row_mask.sum())
+        empty_rows = int(metadata.get("rows_empty", empty_row_mask.sum()))
         empty_columns = int(sum(frame[column].isna().all() or frame[column].astype(str).str.strip().eq("").all() for column in frame.columns))
         duplicate_rows = duplicate_row_count(frame)
         column_analyses: list[ColumnAnalysis] = []
@@ -225,7 +235,8 @@ def analyze_file(
             role, role_confidence = semantic_role(series, str(column_name), inferred)
             invalid_count = inconsistent_value_count(series, inferred)
             confidence = type_confidence(series, inferred)
-            private_reason = sensitive_reason(str(column_name), series)
+            private_reason, sensitivity_category, sensitivity_confidence = sensitivity_details(
+                str(column_name), series, physical_type(series), inferred, role, confidence)
             candidate, key_confidence, key_reasons = _key_info(str(column_name), 100 - null_pct, distinct_pct, sampled)
             null_label = null_band(null_pct)
             anomalies = [] if private_reason else numeric_anomalies(series, inferred, str(column_name))
@@ -241,6 +252,7 @@ def analyze_file(
                 semantic_role=role, semantic_role_confidence=role_confidence,
                 confidence=confidence, type_reason=type_reason(series, str(column_name), inferred),
                 sensitive=bool(private_reason), sensitivity_reason=private_reason,
+                sensitivity_category=sensitivity_category, sensitivity_confidence=sensitivity_confidence,
                 value_count=count, null_count=null_count, null_pct=null_pct,
                 completeness_pct=round(100 - null_pct, 2), distinct_count=distinct_count,
                 distinct_pct=distinct_pct, cardinality=_cardinality(distinct_count, count),
@@ -282,10 +294,21 @@ def analyze_file(
             warnings.append(f"O delimitador de '{table_name}' não foi identificado com segurança; foi usado {repr(import_settings.get('delimiter'))}.")
         if import_settings.get("header_ambiguous") and header_mode == "auto":
             warnings.append(f"A presença de cabeçalho em '{table_name}' é ambígua; a primeira linha foi tratada como dados e foram usados nomes genéricos para evitar expor possíveis valores no relatório.")
+        worksheet_status = metadata.get("worksheet_status", "completed")
+        if worksheet_status == "completed_empty":
+            table_status = "completed_empty"
+        elif rows_analyzed == 0 and rows_total > 0:
+            table_status = "skipped"
+        else:
+            table_status = "completed"
         tables.append(TableAnalysis(
             name=table_name,
+            status=table_status,
             header_row_used=metadata.get("header_row_used", 1 if import_settings.get("header") else None),
-            rows=rows_total, rows_analyzed=rows_analyzed, sampled=sampled,
+            header_detection=metadata.get("header_detection", {}),
+            rows=rows_total, rows_available=rows_total, rows_analyzed=rows_analyzed, sampled=sampled,
+            sampling_method=metadata.get("sampling_method", "none"),
+            rows_empty=empty_rows, trailing_empty_rows=int(metadata.get("trailing_empty_rows", 0)),
             columns=columns_total, columns_analyzed=len(frame.columns), empty_rows=empty_rows,
             empty_columns=empty_columns, duplicate_rows=duplicate_rows,
             table_type=kind, table_type_confidence=kind_confidence, table_type_reason=kind_reason,
@@ -298,6 +321,10 @@ def analyze_file(
         total_profiled_rows += rows_analyzed
         total_profiled_columns += len(frame.columns)
         total_profiled_cells += rows_analyzed * len(frame.columns)
+        if progress_callback:
+            progress_callback({"stage": "quality_analysis", "current_sheet": len(tables),
+                               "total_sheets": len(frames), "current_sheet_name": table_name,
+                               "message": f"Qualidade da aba '{table_name}' calculada"})
 
     if relationship_frames is not None and relationship_budget is not None and file_type == "csv":
         tables_by_name = {table.name: table for table in tables}
@@ -333,8 +360,8 @@ def analyze_file(
                                total_invalid, total_duplicates, total_profiled_cells,
                                sum(column.inconsistent_values > 0 for table in tables for column in table.column_analyses),
                                integrity_pct)
-    failed_tables = sum(table.status == "failed" for table in tables)
-    successful_tables = sum(table.status == "completed" for table in tables)
+    failed_tables = sum(table.status in {"failed", "error", "skipped", "partial"} for table in tables)
+    successful_tables = sum(table.status in {"completed", "completed_empty"} for table in tables)
     tables_omitted = any(int(frame.attrs.get("tables_total", len(frames))) > len(frames) for frame in frames.values())
     report_status = "failed" if not successful_tables else "partial" if failed_tables or tables_omitted else "completed"
     csv_settings = frames[next(iter(frames))].attrs.get("import_settings", {}) if frames else {}
@@ -388,7 +415,7 @@ def analyze_file(
         safety_warnings.append("Fórmulas não são recalculadas; somente valores armazenados em cache podem ser lidos.")
     else:
         safety_warnings = ["O arquivo foi lido localmente como texto; nenhum conteúdo foi executado."]
-    return AnalysisReport(
+    report = AnalysisReport(
         analysis_id=str(uuid.uuid4()), analyzed_at=datetime.now().astimezone(),
         processing_time_ms=int((time.monotonic() - started) * 1000), filename=filename,
         file_type=file_type, file_size_bytes=len(content), file_sha256=sha256(content).hexdigest(),
@@ -397,6 +424,10 @@ def analyze_file(
         tables=tables, relationships=relationships, anomalies=all_anomalies,
         quality=overall_quality, warnings=list(dict.fromkeys(warnings)),
     )
+    if progress_callback:
+        progress_callback({"stage": "consolidating_results", "current_sheet": len(frames),
+                           "total_sheets": len(frames), "message": "Consolidando relatório"})
+    return report
 
 
 def _cardinality(distinct: int, count: int) -> str:

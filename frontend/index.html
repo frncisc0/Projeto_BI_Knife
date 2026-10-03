@@ -26,6 +26,12 @@
       <div id="file-name" class="file-name" hidden></div>
       <button id="analyze-button" class="primary-button" disabled>Analisar arquivos <span>→</span></button>
     </section>
+    <section id="analysis-progress" class="progress-card" hidden aria-live="polite">
+      <div class="progress-heading"><div><strong id="progress-title">Analisando arquivo</strong><div id="progress-filename" class="subtle"></div></div><strong id="progress-percent">0%</strong></div>
+      <progress id="progress-bar" max="100" value="0" aria-label="Progresso da análise"></progress>
+      <div class="progress-details"><span id="progress-stage">Inicializando</span><span id="progress-sheets"></span></div>
+      <div class="progress-details subtle"><span>Decorrido: <b id="progress-elapsed">00:00</b></span><span>Restante: <b id="progress-remaining">Calculando...</b></span></div>
+    </section>
     <div id="status" class="status" role="status" aria-live="polite"></div>
     <section id="results" hidden></section>
     <dialog id="header-choice" aria-labelledby="header-choice-title">

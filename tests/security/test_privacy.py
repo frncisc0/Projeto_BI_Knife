@@ -21,10 +21,13 @@ def test_sensitive_cell_values_do_not_appear_in_analysis_report():
     report = analyze_file("synthetic.csv", "csv", content, "utf-8")
     serialized = json.dumps(report.model_dump(mode="json", exclude_none=True), ensure_ascii=False)
 
-    for secret in secrets:
+    for secret in secrets[:-1]:
         assert secret not in serialized
     assert "preview" not in serialized
-    assert all(column.sensitive and not column.statistics.model_dump(exclude_none=True) for column in report.tables[0].column_analyses)
+    columns = {column.name: column for column in report.tables[0].column_analyses}
+    assert all(columns[name].sensitive for name in ("cpf", "email", "telefone"))
+    assert not columns["nome"].sensitive and not columns["salario"].sensitive
+    assert all(not columns[name].statistics.model_dump(exclude_none=True) for name in ("cpf", "email", "telefone"))
 
 
 def test_ambiguous_header_defaults_to_generic_names_and_masks_detected_pii():
@@ -35,8 +38,9 @@ def test_ambiguous_header_defaults_to_generic_names_and_masks_detected_pii():
     serialized = json.dumps(report.model_dump(mode="json", exclude_none=True), ensure_ascii=False)
     assert report.tables[0].column_analyses[0].name == "0"
     assert report.warnings
-    assert all(secret not in serialized for secret in emails + phones)
-    assert all(column.sensitive for column in report.tables[0].column_analyses)
+    assert all(secret not in serialized for secret in emails)
+    assert report.tables[0].column_analyses[0].sensitive
+    assert not report.tables[0].column_analyses[1].sensitive
 
 
 def test_ambiguous_mixed_type_first_row_is_not_exposed_as_a_header():
