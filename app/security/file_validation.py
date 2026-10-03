@@ -1,6 +1,7 @@
 import csv
 import io
 import zipfile
+from xml.parsers import expat
 import xml.etree.ElementTree as ElementTree
 from pathlib import PurePath
 
@@ -9,19 +10,43 @@ from app.core.exceptions import FileValidationError
 
 
 def _reject_unsafe_xlsx_xml(archive: zipfile.ZipFile, names: list[str]) -> None:
-    """Reject DTD/entity declarations before an XLSX XML parser sees them."""
-    markers = (b"<!DOCTYPE", b"<!ENTITY")
+    """Reject DTD/entity declarations without rejecting valid XML encodings.
+
+    Expat handles XML declarations, BOMs, and UTF-16/UTF-32 signatures. The
+    parser is fed incrementally and configured not to resolve parameter or
+    external entities; any DTD is rejected before workbook parsing.
+    """
+
+    class UnsafeDeclaration(Exception):
+        pass
+
     for name in names:
         if not name.casefold().endswith((".xml", ".rels")):
             continue
-        carry = b""
+
+        parser = expat.ParserCreate()
+        parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+
+        def reject_doctype(*_args: object) -> None:
+            raise UnsafeDeclaration
+
+        parser.StartDoctypeDeclHandler = reject_doctype
+        parser.EntityDeclHandler = reject_doctype
+        parser.ExternalEntityRefHandler = lambda *_args: 0
         with archive.open(name) as xml_stream:
-            while chunk := xml_stream.read(64 * 1024):
-                window = carry + chunk
-                upper_window = window.upper()
-                if b"\x00" in window or any(marker in upper_window for marker in markers):
-                    raise FileValidationError("O XLSX contém declarações XML não permitidas e não será processado.")
-                carry = window[-16:]
+            try:
+                while chunk := xml_stream.read(64 * 1024):
+                    parser.Parse(chunk, False)
+                parser.Parse(b"", True)
+            except UnsafeDeclaration as exc:
+                raise FileValidationError(
+                    "O XLSX contém declarações XML não permitidas e não será processado."
+                ) from exc
+            except expat.ExpatError:
+                # Malformed non-essential parts are not executed. Required
+                # workbook parts are parsed by OpenPyXL, and relationships
+                # are validated structurally below.
+                continue
 
 
 def validate_filename(filename: str | None) -> tuple[str, str]:

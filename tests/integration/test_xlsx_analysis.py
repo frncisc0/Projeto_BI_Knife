@@ -28,6 +28,53 @@ def test_xlsx_detects_sheets_and_relationships():
     assert report.relationships[0].coverage_pct == 100
 
 
+def test_xlsx_xml_declaration_is_accepted_and_workbook_is_analyzed():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Risco"
+    sheet.append(["id", "descricao"])
+    sheet.append([1, "Exemplo"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    with zipfile.ZipFile(BytesIO(buffer.getvalue())) as archive:
+        worksheet_xml = archive.read("xl/worksheets/sheet1.xml")
+    declared_xml = b'<?xml version="1.0" encoding="UTF-8"?>' + worksheet_xml
+    content = _add_xlsx_parts(buffer.getvalue(), {"xl/worksheets/sheet1.xml": declared_xml})
+
+    filename, file_type, encoding, security = validate_upload_detailed("declared.xlsx", content)
+    report = analyze_file(filename, file_type, content, encoding, security_metadata=security)
+
+    assert report.status == "completed"
+    assert report.tables[0].name == "Risco"
+    assert report.tables[0].columns_analyzed == 2
+    assert report.tables[0].rows == 1
+
+
+def test_xlsx_utf16_xml_is_not_rejected_for_containing_nul_bytes():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "UTF16"
+    sheet.append(["id"])
+    sheet.append([1])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    with zipfile.ZipFile(BytesIO(buffer.getvalue())) as archive:
+        worksheet_xml = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    declared_xml = '<?xml version="1.0" encoding="UTF-16"?>' + worksheet_xml
+    content = _add_xlsx_parts(
+        buffer.getvalue(),
+        {"xl/worksheets/sheet1.xml": declared_xml.encode("utf-16")},
+    )
+
+    filename, file_type, encoding, security = validate_upload_detailed("utf16.xlsx", content)
+    report = analyze_file(filename, file_type, content, encoding, security_metadata=security)
+
+    assert report.tables[0].name == "UTF16"
+    assert report.tables[0].rows == 1
+
+
 def test_relationship_confidence_is_limited_when_tables_are_sampled(monkeypatch):
     from app.core.config import get_settings
 
@@ -81,7 +128,8 @@ def _add_xlsx_parts(content: bytes, parts: dict[str, bytes], stored_parts: set[s
     output = BytesIO()
     with zipfile.ZipFile(BytesIO(content)) as original, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as updated:
         for name in original.namelist():
-            updated.writestr(name, original.read(name))
+            if name not in parts:
+                updated.writestr(name, original.read(name))
         for name, value in parts.items():
             compression = zipfile.ZIP_STORED if stored_parts and name in stored_parts else zipfile.ZIP_DEFLATED
             updated.writestr(name, value, compress_type=compression)
