@@ -1,11 +1,15 @@
 from io import BytesIO
 import zipfile
+import json
+from pathlib import Path
 
 from openpyxl import Workbook
 
 from app.security.file_validation import validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.report_service import report_payload
+from app.services.html_report_service import render_html_report
+from app.services.pdf_report_service import render_pdf_report
 
 
 def test_xlsx_detects_sheets_and_relationships():
@@ -26,6 +30,87 @@ def test_xlsx_detects_sheets_and_relationships():
     assert {table.name for table in report.tables} == {"Clientes", "Pedidos"}
     assert report.relationships
     assert report.relationships[0].coverage_pct == 100
+
+
+def test_sample_workbook_exports_all_formats_from_one_analysis_result(monkeypatch):
+    import app.services.analysis_service as analysis_service
+
+    source = Path(__file__).resolve().parents[2] / "test-data" / "sample.xlsx"
+    content = source.read_bytes()
+    original_analyzer = analysis_service.analyze_file
+    calls = []
+
+    def counted_analyzer(*args, **kwargs):
+        calls.append(args[0])
+        return original_analyzer(*args, **kwargs)
+
+    monkeypatch.setattr(analysis_service, "analyze_file", counted_analyzer)
+    result = analysis_service.analyze_file(source.name, "xlsx", content)
+    json_report = report_payload(result)
+    batch = {"file_count": 1, "results": [{"filename": source.name, "analysis": json_report, "error": None}]}
+    json_text = json.dumps(batch, ensure_ascii=False)
+    decoded = json.loads(json_text)
+    html = render_html_report(decoded)
+    pdf = render_pdf_report(decoded)
+
+    assert calls == [source.name]
+    assert decoded["results"][0]["analysis"]["analysis_id"] == result.analysis_id
+    assert source.name in html and "Qualidade geral" in html
+    assert pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
+
+
+def test_target_like_sheets_keep_semantic_roles_consistent_and_export_together():
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    sheets = {
+        "Risco Consolidado - Fornecedor": (
+            ["Fornecedor", "Gestor", "Risco Consolidado - Fornecedor", "Custo da Folha", "Contrato SAP"],
+            [["Fornecedor A", "Ana", 10, "R$ 1.000,00", "SAP-001"],
+             ["Fornecedor B", "Bia", 20, "R$ 2.000,00", "SAP-001"],
+             ["Fornecedor C", "Caio", 30, "R$ 3.000,00", "SAP-003"]]),
+        "Risco - Contratos Ativos": (
+            ["Contrato", "Quantidade de Colaboradores", "Custo de Rescisão", "Status"],
+            [["CT-001", 10, "R$ 100,00", "Ativo"],
+             ["CT-002", 20, "R$ 200,00", "Ativo"],
+             ["CT-003", 30, "R$ 300,00", "Encerrado"]]),
+        "Risco Completo": (
+            ["Custo Rescisório Total", "Aderência", "Conformidade"],
+            [[1000, 95, 99], [2000, 90, 97], [3000, 85, 95]]),
+        "Relação de Colaboradores": (
+            ["Empresa Enel", "Gestor", "Função", "Quantidade de Colaboradores"],
+            [["Enel A", "Ana", "Analista", 10], ["Enel B", "Bia", "Técnica", 20],
+             ["Enel A", "Ana", "Analista", 30]]),
+        "Resumo Encargos": (
+            ["Encargo", "Retenção", "Garantia", "Passivo", "Processo"],
+            [[100, 10, 20, 30, 1], [200, 20, 30, 40, 2], [300, 30, 40, 50, 3]]),
+    }
+    for name, (headers, rows) in sheets.items():
+        worksheet = workbook.create_sheet(name)
+        worksheet.append(headers)
+        for row in rows:
+            worksheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    analysis = analyze_file("semantic-regression.xlsx", "xlsx", buffer.getvalue())
+    payload = report_payload(analysis)
+    batch = {"file_count": 1, "results": [{"filename": analysis.filename, "analysis": payload, "error": None}]}
+    serialized = json.dumps(batch, ensure_ascii=False)
+    html = render_html_report(json.loads(serialized))
+    pdf = render_pdf_report(json.loads(serialized))
+    columns = {column.name: column for table in analysis.tables for column in table.column_analyses}
+
+    assert {table.name for table in analysis.tables} == set(sheets)
+    for name in ("Risco Consolidado - Fornecedor", "Custo da Folha", "Custo de Rescisão",
+                 "Custo Rescisório Total", "Quantidade de Colaboradores",
+                 "Aderência", "Conformidade", "Encargo", "Retenção", "Garantia", "Passivo", "Processo"):
+        assert columns[name].semantic_role == "measure", name
+    for name in ("Fornecedor", "Gestor", "Status", "Empresa Enel", "Função"):
+        assert columns[name].semantic_role == "category", name
+    assert columns["Contrato SAP"].semantic_role == "identifier"
+    assert columns["Contrato SAP"].key_candidate is False
+    assert json.loads(serialized)["results"][0]["analysis"]["analysis_id"] == analysis.analysis_id
+    assert "Qualidade geral" in html and pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
 
 
 def test_xlsx_xml_declaration_is_accepted_and_workbook_is_analyzed():
@@ -182,6 +267,8 @@ def test_xlsx_empty_worksheet_is_completed_empty_not_completed_with_zero_rows():
     table = analyze_file("empty-sheet.xlsx", "xlsx", buffer.getvalue()).tables[0]
     assert table.status == "completed_empty"
     assert table.rows_available == table.rows_analyzed == 0
+    assert table.quality.classification == "Atenção"
+    assert all(alert["severity"] != "critical" for alert in table.quality.alerts)
 
 
 def test_xlsx_sampling_uses_nonempty_rows_and_reports_method(monkeypatch):

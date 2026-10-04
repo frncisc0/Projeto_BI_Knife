@@ -35,7 +35,7 @@ def test_html_report_is_offline_expansible_and_contains_diagnostics():
     report["security"]["active_content_detected"] = True
     report["security"]["active_content_types"] = ["macro"]
     report["tables"][0]["quality"]["alerts"] = [
-        {"severity": "critical", "count": 2, "message": "Valores incompatíveis com o tipo inferido."},
+        {"severity": "attention", "count": 2, "message": "Valores diferem do tipo inferido; revise o contexto."},
         {"severity": "information", "count": 1, "message": "Valores ausentes observados."},
     ]
     html = render_html_report(batch)
@@ -44,7 +44,7 @@ def test_html_report_is_offline_expansible_and_contains_diagnostics():
     assert "Segurança da análise" in html
     assert "Identificadores avaliados" in html
     assert "<details" in html
-    assert 'class="alert critical"' in html
+    assert 'class="alert attention"' in html
     assert 'class="alert information"' in html
     assert "Conteúdo potencialmente ativo detectado" in html
     assert "Foi identificado, mas não executado" in html
@@ -52,10 +52,40 @@ def test_html_report_is_offline_expansible_and_contains_diagnostics():
     assert "<script" not in html
 
 
-def test_report_api_and_frontend_use_existing_payload_without_reanalysis():
+def test_html_explains_composite_keys_relationships_sampling_and_security_counts():
+    batch = _batch()
+    report = batch["results"][0]["analysis"]
+    report["tables"][0]["key_candidates"] = [{
+        "columns": ["area", "turno"], "assessment": "possible_identifier", "confidence": "low",
+        "uniqueness_pct": 100,
+        "reasons": ["Alta unicidade não confirma uma chave."],
+    }]
+    report["tables"][0]["sampled"] = True
+    report["tables"][0]["sampling_method"] = "uniform_reservoir"
+    report["relationships"] = [{
+        "source_table": "Clientes", "source_column": "customer_id", "target_table": "Pedidos",
+        "target_column": "customer_id", "coverage_pct": 100, "cardinality": "1:N",
+        "confidence": "high", "reason": "Nomes compatíveis e cobertura observada.",
+    }]
+    report["security"] = {"external_relationship_count": 2}
+
+    html = render_html_report(batch)
+    assert "possível chave composta" in html
+    assert "Alta unicidade não confirma uma chave" in html
+    assert "Relações potenciais" in html and "customer_id" in html
+    assert "uniform_reservoir" in html
+    assert "Relações externas detectadas: 2" in html
+    assert "pode ter score baixo sem representar erro" in html
+
+
+def test_report_api_and_frontend_use_existing_payload_without_reanalysis(monkeypatch):
     from app.api.routes import export_html_report, export_pdf_report
+    from app.api import routes
 
     batch = _batch()
+    def fail_if_reanalyzed(*_args, **_kwargs):
+        raise AssertionError("Exportação tentou reanalisar o arquivo de origem.")
+    monkeypatch.setattr(routes, "analyze_file", fail_if_reanalyzed)
     html_response = export_html_report(batch)
     pdf_response = export_pdf_report(batch)
     assert html_response.media_type.startswith("text/html")

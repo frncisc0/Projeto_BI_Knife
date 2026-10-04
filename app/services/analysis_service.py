@@ -87,8 +87,12 @@ def _composite_keys(frame: pd.DataFrame, single_keys: set[str], sampled: bool) -
     for name in frame.columns:
         series = frame[name]
         tokens = _name_tokens(str(name))
-        if tokens & {"custo", "risco", "valor", "preco", "salario",
-                     "receita", "margem", "rescisao", "despesa", "faturamento"}:
+        if tokens & {"custo", "cost", "risco", "risk", "valor", "value", "amount", "preco", "price",
+                     "salario", "salary", "receita", "revenue", "margem", "margin", "rescisao",
+                     "despesa", "expense", "faturamento", "rank", "ranking", "score", "point", "points",
+                     "pontos", "nota", "total", "average", "avg", "media", "quantity", "quantidade",
+                     "count", "percent", "percentage", "percentual", "rate", "taxa", "indice", "date",
+                     "data", "datetime", "month", "ano", "year", "day"}:
             continue
         if series.notna().all() and series.nunique() / len(frame) >= 0.5:
             eligible.append(name)
@@ -104,8 +108,10 @@ def _composite_keys(frame: pd.DataFrame, single_keys: set[str], sampled: bool) -
             if unique_pct >= 98 and frame[first].nunique() < len(frame) and frame[second].nunique() < len(frame):
                 candidates.append({
                     "columns": [str(first), str(second)], "confidence": "medium" if not sampled else "low",
+                    "assessment": "possible_identifier",
                     "uniqueness_pct": round(unique_pct, 1),
-                    "reasons": ["A combinação é mais única do que cada coluna isolada.",
+                    "reasons": ["A combinação é altamente única na amostra avaliada; isso, isoladamente, não confirma uma chave.",
+                                "Confirme a semântica e a regra de negócio antes de usá-la como identificador.",
                                 "Avaliada sobre uma amostra." if sampled else "Sem nulos na combinação."],
                 })
                 if len(candidates) >= 5:
@@ -126,7 +132,8 @@ def _table_kind(name: str, frame: pd.DataFrame) -> tuple[str, str, str]:
 
 def _quality(rows: int, columns: int, null_count: int, invalid_count: int, duplicate_rows: int,
              cells_override: int | None = None, inconsistent_columns: int = 0,
-             integrity_pct: float | None = None) -> QualityAnalysis:
+             integrity_pct: float | None = None, affected_null_columns: list[str] | None = None,
+             affected_invalid_columns: list[str] | None = None) -> QualityAnalysis:
     settings = get_settings()
     cells = max(1, cells_override if cells_override is not None else rows * columns)
     no_structure = rows == 0 or columns == 0
@@ -145,27 +152,37 @@ def _quality(rows: int, columns: int, null_count: int, invalid_count: int, dupli
     total_weight = sum(weight for _, weight in dimensions.values()) or 1
     score = round(sum(value * weight for value, weight in dimensions.values()) / total_weight, 1)
     score = max(0.0, min(100.0, score))
-    classification = ("Crítica" if no_structure else "Excelente" if score >= settings.quality_excellent_threshold
+    classification = ("Atenção" if no_structure else "Excelente" if score >= settings.quality_excellent_threshold
                       else "Boa" if score >= settings.quality_good_threshold
-                      else "Atenção" if score >= settings.quality_attention_threshold else "Crítica")
+                      else "Atenção" if score >= settings.quality_attention_threshold else "Baixa")
     alerts: list[dict[str, str | int | float]] = []
     if null_count:
         alerts.append({"severity": "information", "count": null_count,
-                       "message": f"{null_count} valores ausentes ({100 - completeness:.1f}%); avalie se a ausência é esperada para estas colunas."})
+                       "message": f"{null_count} valores ausentes ({100 - completeness:.1f}%); avalie se a ausência é esperada para estas colunas.",
+                       "affected_columns": ", ".join(affected_null_columns or []),
+                       "recommendation": "Confirme se a ausência é esperada para o processo e para as colunas indicadas."})
     if duplicate_rows:
-        alerts.append({"severity": "attention", "count": duplicate_rows, "message": f"{duplicate_rows} linhas repetidas foram encontradas."})
+        alerts.append({"severity": "attention", "count": duplicate_rows,
+                       "message": f"{duplicate_rows} linhas repetidas foram encontradas.",
+                       "recommendation": "Verifique se as repetições são esperadas antes de removê-las."})
     if invalid_count:
-        alerts.append({"severity": "critical", "count": invalid_count, "message": f"{invalid_count} valores não correspondem ao tipo inferido."})
+        alert_columns = affected_invalid_columns or []
+        alerts.append({"severity": "attention", "count": invalid_count,
+                       "message": f"{invalid_count} valores diferem do tipo inferido em {len(alert_columns)} coluna(s); verifique o padrão identificado.",
+                       "affected_columns": ", ".join(alert_columns),
+                       "recommendation": "Revise as colunas indicadas; a diferença pode ser legítima ou decorrer da inferência de tipo."})
     if inconsistent_columns:
         alerts.append({"severity": "attention", "count": inconsistent_columns,
-                       "message": f"{inconsistent_columns} colunas apresentam mistura de tipos ou valores incompatíveis."})
+                       "message": f"{inconsistent_columns} colunas apresentam mistura de tipos ou valores incompatíveis.",
+                       "recommendation": "Confira as colunas e confirme se os diferentes formatos são válidos para o processo."})
     if integrity_pct is not None and integrity_pct < 95:
         alerts.append({"severity": "attention", "count": round(100 - integrity_pct, 1),
                        "message": f"Candidatos a relacionamento apresentam {100 - integrity_pct:.1f}% de valores sem correspondência estimada."})
     if not alerts and not no_structure:
         alerts.append({"severity": "ok", "count": 0, "message": "Nenhum alerta básico foi identificado pelas regras atuais."})
     if no_structure:
-        alerts.append({"severity": "critical", "count": 0, "message": "A tabela não possui estrutura de dados para avaliação."})
+        alerts.append({"severity": "attention", "count": 0, "message": "A tabela não possui estrutura de dados para avaliação.",
+                       "recommendation": "Confirme se a aba é intencionalmente vazia, auxiliar ou destinada a preenchimento futuro."})
     return QualityAnalysis(score=score, classification=classification, completeness_pct=round(completeness, 1),
                            uniqueness_pct=round(uniqueness, 1), consistency_pct=round(consistency, 1),
                            validity_pct=round(validity, 1), integrity_pct=round(integrity_pct, 1) if integrity_pct is not None else None,
@@ -305,8 +322,11 @@ def analyze_file(
         key_candidates.extend(_composite_keys(frame, single_keys, sampled))
         key_candidates = key_candidates[:settings.max_key_candidates]
         inconsistent_columns = sum(column.inconsistent_values > 0 for column in column_analyses)
+        null_columns = [column.name for column in column_analyses if column.null_count]
+        invalid_columns = [column.name for column in column_analyses if column.inconsistent_values]
         quality = _quality(rows_analyzed, len(frame.columns), table_nulls, table_invalid, duplicate_rows,
-                           rows_analyzed * len(frame.columns), inconsistent_columns)
+                           rows_analyzed * len(frame.columns), inconsistent_columns,
+                           affected_null_columns=null_columns, affected_invalid_columns=invalid_columns)
         kind, kind_confidence, kind_reason = _table_kind(table_name, frame)
         if sampled:
             warnings.append(f"A tabela '{table_name}' foi amostrada: {rows_analyzed:,} de {rows_total:,} linhas foram perfiladas.")
@@ -380,13 +400,18 @@ def analyze_file(
         table_nulls = sum(column.null_count for column in table.column_analyses)
         table_invalid = sum(column.inconsistent_values for column in table.column_analyses)
         table_inconsistent_columns = sum(column.inconsistent_values > 0 for column in table.column_analyses)
+        table_null_columns = [column.name for column in table.column_analyses if column.null_count]
+        table_invalid_columns = [column.name for column in table.column_analyses if column.inconsistent_values]
         table.quality = _quality(table.rows_analyzed, table.columns_analyzed, table_nulls, table_invalid,
                                  table.duplicate_rows, table.rows_analyzed * table.columns_analyzed,
-                                 table_inconsistent_columns, table_integrity)
+                                 table_inconsistent_columns, table_integrity, table_null_columns,
+                                 table_invalid_columns)
     overall_quality = _quality(total_profiled_rows, max(1, total_profiled_columns), total_nulls,
                                total_invalid, total_duplicates, total_profiled_cells,
                                sum(column.inconsistent_values > 0 for table in tables for column in table.column_analyses),
-                               integrity_pct)
+                               integrity_pct,
+                               [column.name for table in tables for column in table.column_analyses if column.null_count],
+                               [column.name for table in tables for column in table.column_analyses if column.inconsistent_values])
     failed_tables = sum(table.status in {"failed", "error", "skipped", "partial"} for table in tables)
     successful_tables = sum(table.status in {"completed", "completed_empty"} for table in tables)
     tables_omitted = any(int(frame.attrs.get("tables_total", len(frames))) > len(frames) for frame in frames.values())

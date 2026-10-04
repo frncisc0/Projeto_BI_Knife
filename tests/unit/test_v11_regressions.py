@@ -75,6 +75,52 @@ def test_numeric_identifiers_are_not_labeled_as_measures():
     assert column.physical_type == "integer"
 
 
+def test_numeric_semantic_hints_are_measures_even_when_headers_are_not_numeric_types():
+    import pandas as pd
+    from app.analyzers.schema_analyzer import semantic_role
+
+    numeric_names = (
+        "Custo de Rescisão", "Custo da Folha", "Custo Rescisório Total", "Risco Consolidado - Fornecedor",
+        "Risco - Contratos Ativos", "Risco Completo", "Quantidade de Colaboradores",
+        "Número de colaboradores", "Qtd", "Aderência", "Conformidade", "Encargo", "Retenção",
+        "Garantia", "Passivo", "Processo",
+    )
+    for name in numeric_names:
+        role, confidence = semantic_role(pd.Series([100, 200, 300, 400, 500]), name, "inteiro")
+        assert role == "measure", name
+        assert confidence in {"medium", "high"}
+
+    currency_values = pd.Series(["R$ 1.000,00", "R$ 2.500,00", "R$ 3.000,00"])
+    role, confidence = semantic_role(currency_values, "Custo da Folha", "categórico")
+    assert role == "measure"
+    assert confidence == "medium"
+
+
+def test_descriptive_semantic_hints_remain_categories():
+    import pandas as pd
+    from app.analyzers.schema_analyzer import semantic_role
+
+    category_names = (
+        "Empresa", "Contratada", "Gestor", "Diretoria", "Gerência", "Status", "Função",
+        "Empresa Enel", "Linha de Negócio",
+    )
+    values = pd.Series(["Grupo A", "Grupo B", "Grupo A", "Grupo C", "Grupo B"])
+    for name in category_names:
+        role, confidence = semantic_role(values, name, "categórico")
+        assert role == "category", name
+        assert confidence in {"medium", "high"}
+
+
+def test_identifier_semantics_do_not_automatically_make_a_column_a_key():
+    report = analyze_file("sap-contracts.csv", "csv",
+                          b"Contrato SAP,Status\nSAP-01,Ativo\nSAP-01,Ativo\nSAP-02,Encerrado\nSAP-02,Encerrado\n",
+                          "utf-8", header_mode="true")
+    contract_sap = report.tables[0].column_analyses[0]
+
+    assert contract_sap.semantic_role == "identifier"
+    assert contract_sap.key_candidate is False
+
+
 def test_many_nulls_are_described_as_absence_to_review_not_an_error():
     report = analyze_file("nulls.csv", "csv", b"segmento,score\nA,\nB,\nC,\nD,\n", "utf-8", header_mode="true")
     messages = " ".join(alert["message"] for alert in report.quality.alerts)

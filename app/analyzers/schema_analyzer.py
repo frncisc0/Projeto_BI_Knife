@@ -6,6 +6,16 @@ from app.analyzers.statistics_analyzer import numeric_values
 
 
 IDENTIFIER_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número", "cpf", "cnpj", "pedido", "processo")
+SEMANTIC_IDENTIFIER_TERMS = {"id", "codigo", "cod", "chave", "contrato", "cpf", "cnpj", "pedido", "sku", "registro", "matricula"}
+MEASURE_TERMS = {
+    "custo", "valor", "risco", "faturamento", "salario", "encargo", "retencao", "garantia", "passivo",
+    "aderencia", "conformidade", "processo", "quantidade", "qtd", "colaborador", "colaboradores", "count", "total",
+    "amount", "cost", "revenue", "salary", "charge", "withholding", "liability",
+}
+CATEGORY_TERMS = {
+    "empresa", "contratada", "gestor", "diretoria", "gerencia", "status", "funcao", "linha", "negocio",
+    "department", "departamento", "area", "fornecedor", "supplier", "manager", "company",
+}
 SENSITIVE_NAME_CATEGORIES = {
     "cpf": {"cpf"}, "cnpj": {"cnpj"}, "telefone": {"telefone", "celular", "phone", "mobile"},
     "email": {"email", "mail"}, "rg": {"rg"}, "documento": {"documento", "document", "national_id", "ssn"},
@@ -127,37 +137,76 @@ def physical_type(series: pd.Series) -> str:
 
 
 def semantic_role(series: pd.Series, column_name: str, inferred_type: str) -> tuple[str, str]:
-    """Suggest a broad column role, with confidence kept separate from type."""
+    """Infer a cautious semantic role from the header, physical values, and their pattern."""
     values = series.dropna()
     if values.empty:
         return "unknown", "low"
-    name = column_name.casefold()
-    tokens = set(re.findall(r"[a-z0-9]+", name))
-    identifier_terms = set(IDENTIFIER_TERMS) | {"sku", "code", "cod", "id"}
-    code_terms = {"code", "cod", "codigo", "código", "sku", "cep", "zip"}
-    if tokens & code_terms:
-        return "code", "medium"
-    if tokens & identifier_terms:
-        return "identifier", "high" if inferred_type == "identificador" else "medium"
+    normalized_name = unicodedata.normalize("NFKD", column_name.casefold())
+    normalized_name = "".join(char for char in normalized_name if not unicodedata.combining(char))
+    tokens = set(re.findall(r"[a-z0-9]+", normalized_name))
+    quantity_context = bool(tokens & {"quantidade", "qtd", "colaborador", "colaboradores"})
+    identifier_hint = bool(tokens & SEMANTIC_IDENTIFIER_TERMS) or ("numero" in tokens and not quantity_context)
+    measure_hint = bool(tokens & MEASURE_TERMS)
+    category_hint = bool(tokens & CATEGORY_TERMS)
+
     if "data/hora" in inferred_type:
         return "datetime", "medium"
     if "data" in inferred_type:
         return "date", "medium"
     if inferred_type == "booleano":
         return "boolean", "medium"
-    if inferred_type in {"moeda", "percentual", "inteiro", "decimal"}:
-        return "measure", "medium" if len(values) >= 5 else "low"
-    if inferred_type == "numérico (texto)":
-        return "measure", "low"
-    text = values.astype(str).str.strip()
+
+    numeric_ratio = _numeric_compatibility(values)
     unique_ratio = values.nunique(dropna=True) / max(1, len(values))
+
+    # A quantity phrase takes precedence over the generic word "número".
+    if quantity_context and numeric_ratio >= 0.8:
+        return "measure", "high" if numeric_ratio == 1.0 and len(values) >= 5 else "medium"
+
+    # Explicit identifier semantics do not imply that the column is a table key.
+    if identifier_hint:
+        return "identifier", "high" if inferred_type == "identificador" else "medium"
+
+    if measure_hint:
+        if numeric_ratio >= 0.8:
+            return "measure", "high" if numeric_ratio == 1.0 and len(values) >= 5 else "medium"
+        if category_hint:
+            return "category", "medium"
+        return "unknown", "low"
+
+    if category_hint:
+        if not pd.api.types.is_numeric_dtype(series.dtype):
+            return "category", "high" if len(values) >= 5 else "medium"
+        if unique_ratio <= 0.8 or values.nunique(dropna=True) <= 20:
+            return "category", "medium"
+        return "unknown", "low"
+
+    if inferred_type in {"moeda", "percentual", "inteiro", "decimal"} and numeric_ratio >= 0.8:
+        return "measure", "medium" if len(values) >= 5 else "low"
+    if inferred_type == "numérico (texto)" and numeric_ratio >= 0.8:
+        return "measure", "low"
     if unique_ratio <= 0.5:
         return "category", "medium" if len(values) >= 5 else "low"
+    text = values.astype(str).str.strip()
     if text.str.len().median() >= 40:
         return "text", "medium"
     if unique_ratio >= 0.9 and len(values) >= 5:
         return "text", "low"
     return "unknown", "low"
+
+
+def _numeric_compatibility(values: pd.Series) -> float:
+    """Return the fraction of values that are numeric or clearly formatted as numbers."""
+    if values.empty:
+        return 0.0
+    if pd.api.types.is_numeric_dtype(values.dtype):
+        return 1.0
+    text = values.astype(str).str.strip()
+    formatted_number = text.str.fullmatch(r"(?i)[\sR$€£+\-()?0-9.,%]+")
+    if not formatted_number.any():
+        return 0.0
+    parsed = numeric_values(values.loc[formatted_number]).notna().sum()
+    return float(parsed / len(values))
 
 
 def _has_identifier_term(name: str) -> bool:

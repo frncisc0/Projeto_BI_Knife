@@ -7,7 +7,7 @@ from io import BytesIO
 from typing import Any
 
 
-def _safe(value: Any, fallback: str = "—") -> str:
+def _safe(value: Any, fallback: str = "-") -> str:
     return escape(str(value if value is not None else fallback)).replace("\n", "<br/>")
 
 
@@ -17,7 +17,7 @@ def _reports(batch: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
 
 
 def _status(value: Any) -> str:
-    return {"completed": "Concluída", "partial": "Parcial", "failed": "Falha"}.get(str(value), str(value or "—"))
+    return {"completed": "Concluída", "partial": "Parcial", "failed": "Falha"}.get(str(value), str(value or "-"))
 
 
 def _duration(value: Any) -> str:
@@ -83,13 +83,14 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
                                 f"Tempo: {_safe(_duration(report.get('processing_time_ms', 0)))} &nbsp; | &nbsp; "
                                 f"Status: {_safe(_status(report.get('status')))}", styles["SmallText"])])
     story.extend([Paragraph("1. Resumo", styles["Section"]),
-                  _metric_table([("Abas", total_sheets), ("Registros analisados", total_rows),
-                                 ("Colunas", total_columns), ("Alertas", len(all_alerts))], Table, TableStyle, colors, pale, styles),
+                  _metric_table([("Abas", total_sheets), ("Registros avaliados", total_rows),
+                                 ("Colunas", total_columns), ("Tipos de pontos de atenção", len(all_alerts))], Table, TableStyle, colors, pale, styles),
+                  Paragraph("O score resume regras heurísticas. Uma aba auxiliar, template ou destinada a preenchimento pode ter score baixo sem representar erro; interprete as dimensões e os alertas no contexto.", styles["SmallText"]),
                   Paragraph("2. Qualidade dos dados", styles["Section"])])
     for filename, report in reports:
         quality = report.get("quality", {})
-        score = _safe(quality.get("score", "—"))
-        story.append(Paragraph(f"{_safe(filename)} — {score}/100 · {_safe(quality.get('classification'))}", styles["Heading4"]))
+        score = _safe(quality.get("score", "-"))
+        story.append(Paragraph(f"{_safe(filename)} - {score}/100 · {_safe(quality.get('classification'))}", styles["Heading4"]))
         dimensions = [("Dimensão", "Resultado"),
                       ("Completude", f"{_safe(quality.get('completeness_pct'))}%"),
                       ("Unicidade", f"{_safe(quality.get('uniqueness_pct'))}%"),
@@ -104,44 +105,73 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
     if all_alerts:
         for table, alert in all_alerts[:30]:
             count = alert.get("count")
-            count_text = f" — {int(count):,} ocorrência(s)".replace(",", ".") if isinstance(count, (int, float)) and count else ""
+            count_text = f" - {int(count):,} ocorrência(s)".replace(",", ".") if isinstance(count, (int, float)) and count else ""
             message = _safe(alert.get("message", "Ponto para revisão"))
             title = severity_names.get(alert.get("severity"), "Informação")
-            paragraph = Paragraph(f"<b>{title}{count_text}</b> · {message}<br/>Aba: {_safe(table.get('name'))}. "
-                                  "Revise o contexto antes de interpretar como problema.", styles["AlertText"])
+            affected = (f"<br/>Colunas afetadas: {_safe(alert.get('affected_columns'))}."
+                        if alert.get("affected_columns") else "")
+            recommendation = _safe(alert.get("recommendation", "Revise o contexto antes de interpretar como problema."))
+            paragraph = Paragraph(f"<b>{title}{count_text}</b> · {message}{affected}<br/>Aba: {_safe(table.get('name'))}. "
+                                  f"{recommendation}", styles["AlertText"])
             story.append(KeepTogether([paragraph, Spacer(1, 2 * mm)]))
     else:
         story.append(Paragraph("Nenhum alerta de qualidade foi registrado.", styles["BodyText"]))
 
     story.append(Paragraph("4. Abas analisadas", styles["Section"]))
-    sheet_rows = [["Arquivo / aba", "Linhas", "Colunas", "Qualidade", "Alertas"]]
+    sheet_rows = [["Arquivo / aba", "Linhas disponíveis / avaliadas", "Colunas", "Qualidade", "Pontos de atenção"]]
     for filename, report in reports:
         for table in report.get("tables", []):
             alerts = sum(1 for alert in table.get("quality", {}).get("alerts", []) if alert.get("severity") != "ok")
-            sheet_rows.append([f"{filename} / {table.get('name', '—')}",
-                               str(table.get("rows_analyzed", 0)), str(table.get("columns", 0)),
-                               f"{table.get('quality', {}).get('classification', '—')} ({table.get('quality', {}).get('score', 0)}/100)",
+            sheet_rows.append([f"{filename} / {table.get('name', '-')}",
+                               f"{table.get('rows_available', table.get('rows', 0))} / {table.get('rows_analyzed', 0)}",
+                               str(table.get("columns", 0)),
+                               f"{table.get('quality', {}).get('classification', '-')} ({table.get('quality', {}).get('score', 0)}/100)",
                                str(alerts)])
     story.append(_simple_table(sheet_rows, LongTable, TableStyle, Paragraph, styles,
-                               [76 * mm, 25 * mm, 19 * mm, 39 * mm, 17 * mm], repeat_rows=1))
+                               [55 * mm, 38 * mm, 17 * mm, 39 * mm, 27 * mm], repeat_rows=1))
 
     story.append(Paragraph("5. Estrutura das colunas", styles["Section"]))
     column_rows = [["Arquivo / aba / coluna", "Tipo físico", "Tipo inferido", "Papel", "Nulos"]]
     key_labels = {"strong_candidate": "Candidato forte", "possible_identifier": "Possível identificador",
                   "high_uniqueness_measure": "Medida única; não chave",
-                  "high_uniqueness_unconfirmed": "Unicidade sem evidência", "not_candidate": "—"}
+                  "high_uniqueness_unconfirmed": "Unicidade sem evidência", "not_candidate": "-"}
     for filename, report in reports:
         for table in report.get("tables", []):
             for column in table.get("column_analyses", []):
-                label = f"{filename} / {table.get('name', '—')} / {column.get('name', '—')}"
-                role = f"{column.get('semantic_role', '—')}\n{key_labels.get(column.get('key_assessment', 'not_candidate'), '—')}"
-                column_rows.append([label, column.get("physical_type") or column.get("original_type", "—"),
-                                    column.get("inferred_type", "—"), role,
+                label = f"{filename} / {table.get('name', '-')} / {column.get('name', '-')}"
+                role = f"{column.get('semantic_role', '-')}\n{key_labels.get(column.get('key_assessment', 'not_candidate'), '-')}"
+                column_rows.append([label, column.get("physical_type") or column.get("original_type", "-"),
+                                    column.get("inferred_type", "-"), role,
                                     f"{column.get('null_count', 0)} ({column.get('null_pct', 0)}%)"])
     story.append(_simple_table(column_rows, LongTable, TableStyle, Paragraph, styles,
                                [61 * mm, 25 * mm, 37 * mm, 31 * mm, 22 * mm], repeat_rows=1))
+    for filename, report in reports:
+        for table in report.get("tables", []):
+            for candidate in table.get("key_candidates", []):
+                labels = " + ".join(str(name) for name in candidate.get("columns", []))
+                reasons = "; ".join(candidate.get("reasons", []))
+                story.append(Paragraph(f"Possível identificador em {_safe(filename)} / {_safe(table.get('name'))}: "
+                                       f"{_safe(labels)} · {_safe(candidate.get('assessment', 'possible_identifier'))} · "
+                                       f"{_safe(candidate.get('uniqueness_pct', '-'))}% único. {_safe(reasons)}",
+                                       styles["SmallText"]))
 
-    story.append(Paragraph("6. Segurança", styles["Section"]))
+    story.append(Paragraph("6. Relações potenciais", styles["Section"]))
+    relationships = [(filename, relationship) for filename, report in reports
+                     for relationship in report.get("relationships", [])]
+    if relationships:
+        relation_rows = [["Arquivo", "Origem", "Destino", "Correspondência", "Evidência"]]
+        for filename, relationship in relationships:
+            relation_rows.append([filename,
+                                  f"{relationship.get('source_table')}.{relationship.get('source_column')}",
+                                  f"{relationship.get('target_table')}.{relationship.get('target_column')}",
+                                  f"{relationship.get('coverage_pct')}% · {relationship.get('cardinality')}",
+                                  relationship.get("reason", "Possível relação; confirme a regra de negócio.")])
+        story.append(_simple_table(relation_rows, LongTable, TableStyle, Paragraph, styles,
+                                   [30 * mm, 35 * mm, 35 * mm, 29 * mm, 47 * mm], repeat_rows=1))
+    else:
+        story.append(Paragraph("Nenhuma relação com evidência suficiente foi sugerida.", styles["BodyText"]))
+
+    story.append(Paragraph("7. Segurança", styles["Section"]))
     checks = []
     for filename, report in reports:
         security = report.get("security") or {}
@@ -151,12 +181,12 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         checks.append([filename,
                        "Arquivo original não alterado · Processado localmente · Macros: não executadas · Objetos: não executados · Relações externas: não seguidas · "
                        "Conexões: não acessadas/atualizadas · Fórmulas: "
-                       f"{formula_action}.",
+                       f"{formula_action} · Relações externas detectadas: {int(security.get('external_relationship_count', 0) or 0)}.",
                        "Conteúdo potencialmente ativo detectado, mas não executado." if security.get("active_content_detected")
                        else "Nenhum conteúdo potencialmente ativo detectado."])
     story.append(_simple_table([["Arquivo", "Proteções", "Observação"], *checks], LongTable, TableStyle, Paragraph,
                                styles, [48 * mm, 81 * mm, 47 * mm], repeat_rows=1))
-    story.append(Paragraph("7. Observações", styles["Section"]))
+    story.append(Paragraph("8. Observações", styles["Section"]))
     story.append(Paragraph("Os resultados são heurísticos e podem refletir amostragem. Valores fora da faixa de 1,5 × IQR "
                            "podem ser legítimos e não representam necessariamente erros. Verifique as regras de negócio "
                            "antes de usar candidatos a identificador ou relacionamentos.", styles["BodyText"]))
@@ -164,11 +194,11 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         for warning in [*report.get("warnings", []), *report.get("security_warnings", [])][:30]:
             story.append(Paragraph("• " + _safe(warning), styles["SmallText"]))
 
-    story.append(Paragraph("8. Anomalias", styles["Section"]))
+    story.append(Paragraph("9. Anomalias", styles["Section"]))
     anomaly_rows = [["Arquivo", "Coluna", "Método", "Ocorrências", "Gravidade", "Descrição"]]
     for filename, report in reports:
         for anomaly in report.get("anomalies", []):
-            anomaly_rows.append([filename, anomaly.get("column", "—"), anomaly.get("method", "—"),
+            anomaly_rows.append([filename, anomaly.get("column", "-"), anomaly.get("method", "-"),
                                  str(anomaly.get("count", 0)),
                                  severity_names.get(anomaly.get("severity"), "Informação"),
                                  anomaly.get("description", "Anomalia identificada.")])
@@ -178,7 +208,7 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         story.append(_simple_table(anomaly_rows, LongTable, TableStyle, Paragraph, styles,
                                    [30 * mm, 30 * mm, 29 * mm, 19 * mm, 21 * mm, 47 * mm], repeat_rows=1))
 
-    story.append(Paragraph("9. Detalhes técnicos", styles["Section"]))
+    story.append(Paragraph("10. Detalhes técnicos", styles["Section"]))
     technical_rows = [["Arquivo", "Tipo", "Tamanho", "Linhas analisadas / disponíveis", "Colunas", "Amostragem"]]
     for filename, report in reports:
         tables = report.get("tables", [])
@@ -188,13 +218,13 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         sampled_tables = [table for table in tables if table.get("sampled")]
         sampling = (", ".join(sorted({str(table.get("sampling_method", "amostragem"))
                                      for table in sampled_tables})) if sampled_tables else "Não")
-        technical_rows.append([filename, report.get("file_type", "—"),
+        technical_rows.append([filename, report.get("file_type", "-"),
                                f"{int(report.get('file_size_bytes', 0) or 0) / (1024 * 1024):.2f} MB",
                                f"{analyzed_rows} / {available_rows}", str(columns), sampling])
     story.append(_simple_table(technical_rows, LongTable, TableStyle, Paragraph, styles,
                                [43 * mm, 17 * mm, 22 * mm, 42 * mm, 17 * mm, 35 * mm], repeat_rows=1))
     for filename, report in reports:
-        story.append(Paragraph(f"{_safe(filename)} — identificador da análise: {_safe(report.get('analysis_id'))}; "
+        story.append(Paragraph(f"{_safe(filename)} - identificador da análise: {_safe(report.get('analysis_id'))}; "
                                f"duração: {_safe(_duration(report.get('processing_time_ms', 0)))}; "
                                f"abas registradas: {len(report.get('tables', []))}.", styles["SmallText"]))
 

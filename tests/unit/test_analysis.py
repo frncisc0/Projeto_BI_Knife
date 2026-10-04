@@ -29,6 +29,10 @@ def test_numeric_text_statistics_and_inconsistent_value_detection():
     assert amount.inferred_type == "moeda"
     assert amount.inconsistent_values == 1
     assert amount.statistics.mean == 50
+    mismatch = next(alert for alert in report.quality.alerts if "diferem do tipo inferido" in alert["message"])
+    assert mismatch["severity"] == "attention"
+    assert mismatch["affected_columns"] == "amount"
+    assert mismatch["recommendation"]
 
 
 def test_relationship_suggestion_uses_unique_target_and_value_coverage():
@@ -66,6 +70,21 @@ def test_sampled_analysis_reports_total_and_profiled_rows(monkeypatch):
 def test_composite_key_candidate_is_suggested():
     report = analyze_file("composite.csv", "csv", b"area,turno\nA,1\nA,2\nB,1\nB,2\n", "utf-8", header_mode="true")
     assert any(candidate["columns"] == ["area", "turno"] for candidate in report.tables[0].key_candidates)
+    composite = next(candidate for candidate in report.tables[0].key_candidates if len(candidate["columns"]) == 2)
+    assert composite["assessment"] == "possible_identifier"
+    assert "não confirma uma chave" in composite["reasons"][0]
+
+
+def test_matching_rank_columns_do_not_create_a_relationship():
+    import pandas as pd
+    from app.analyzers.relationship_analyzer import suggest_relationships
+
+    frames = {
+        "Classificacao": pd.DataFrame({"rank": [1, 2, 3]}),
+        "Historico": pd.DataFrame({"rank": [1, 1, 2]}),
+    }
+
+    assert suggest_relationships(frames, []) == []
 
 
 def test_empty_csv_rows_are_counted_and_reported():
@@ -93,3 +112,15 @@ def test_unique_measures_are_not_key_candidates_but_contract_id_is():
     for name in ("Custo de Rescisao", "Risco Total"):
         assert columns[name].key_candidate is False
         assert columns[name].key_assessment == "high_uniqueness_measure"
+
+
+def test_contract_can_be_a_possible_identifier_without_being_asserted_as_a_key():
+    rows = [f"A-{index:03d},{index * 10}" for index in range(1, 21)]
+    rows[1] = "A-001,20"
+    content = ("Contrato,Valor\n" + "\n".join(rows) + "\n").encode()
+    report = analyze_file("contracts.csv", "csv", content, "utf-8", header_mode="true")
+    contract = next(column for column in report.tables[0].column_analyses if column.name == "Contrato")
+
+    assert contract.key_candidate is True
+    assert contract.key_assessment == "possible_identifier"
+    assert contract.key_confidence == "medium"

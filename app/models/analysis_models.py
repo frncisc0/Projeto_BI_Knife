@@ -69,7 +69,7 @@ class Anomaly(BaseModel):
 
 class QualityAnalysis(BaseModel):
     score: float
-    classification: Literal["Excelente", "Boa", "Atenção", "Crítica"]
+    classification: Literal["Excelente", "Boa", "Atenção", "Baixa", "Crítica"]
     completeness_pct: float
     uniqueness_pct: float
     consistency_pct: float

@@ -1,6 +1,12 @@
 # BI Swiss Knife
 
-Aplicação local para diagnosticar arquivos `.xlsx`, `.xlsm` e `.csv`. A versão **0.3.0** aprofunda o profiling e a análise de qualidade, mantendo o processamento local e relatórios sem valores de células.
+Aplicação local para diagnosticar estrutura e qualidade de arquivos `.xlsx`, `.xlsm` e `.csv`. O fluxo da V1 analisa cada arquivo uma vez e reutiliza o resultado estruturado para JSON, HTML e PDF; o processamento permanece local.
+
+## Escopo da V1
+
+A V1 responde o que existe no arquivo: abas, dimensões, colunas e tipos inferidos; possíveis identificadores e relações; ausência de valores, diferenças em relação aos tipos inferidos, duplicidades e anomalias estatísticas; score por dimensão; e sinais de conteúdo ativo ou relações externas. As classificações e sugestões são heurísticas e devem ser revistas com as regras do processo. Alta unicidade, sozinha, não confirma uma chave. Anomalia estatística não significa erro.
+
+A V1 não cria dashboards, KPIs, DAX, consultas Power Query nem modelos de dados automaticamente. Essas ideias são propostas para uma etapa futura e não fazem parte das funções atuais.
 
 ## Requisitos
 
@@ -19,6 +25,18 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Abra http://127.0.0.1:8000. O servidor escuta somente no loopback por padrão. Após instalar as dependências, a aplicação funciona sem internet.
 
 Ao atualizar o projeto pelo GitHub, execute novamente `python -m pip install -r requirements.txt` no ambiente virtual antes de iniciar o servidor. Isso instala dependências adicionadas em atualizações, incluindo ReportLab para exportação de PDF.
+
+## Analisar arquivos e abrir relatórios
+
+1. Inicie a aplicação e abra o endereço local no navegador.
+2. Selecione arquivos `.xlsx`, `.xlsm` ou `.csv`, ou arraste uma pasta/arquivos para a área de entrada. Para CSV, confira delimitador, separador decimal e presença de cabeçalho quando solicitado.
+3. Ao concluir, a aplicação baixa o JSON estruturado. Ele é o registro completo dos metadados, abas, colunas, estatísticas agregadas, qualidade, alertas, identificadores sugeridos, anomalias, relações, segurança e configurações de amostragem.
+4. Use os botões de exportação para salvar o resumo CSV, HTML ou PDF. Abra o HTML salvo em qualquer navegador; ele é autocontido e funciona offline. O PDF também é criado localmente. Essas exportações usam o resultado já calculado e não reabrem o arquivo de origem.
+5. Interprete registros avaliados em conjunto com registros disponíveis e a indicação de amostragem. Um score baixo ou uma sugestão não confirma, por si só, um problema de negócio.
+
+## Privacidade e segurança
+
+Os arquivos são lidos localmente, em memória e em modo somente leitura. A aplicação não envia dados a serviços externos, não usa IA remota ou CDN e não executa macros, fórmulas, objetos incorporados ou conexões externas. Relatórios omitem valores brutos de células e suprimem estatísticas de colunas reconhecidas como potencialmente sensíveis. Essa identificação é heurística; revise nomes de colunas e resultados antes de compartilhar relatórios. Veja [SECURITY.md](SECURITY.md) para controles e limites detalhados.
 
 ### Configuração
 
@@ -75,3 +93,5 @@ Os dados de teste são sintéticos. Consulte [docs/architecture.md](docs/archite
 ## Limitações atuais
 
 O relatório usa amostragem limitada para profiling em arquivos grandes e identifica quando isso ocorre; a contagem total de linhas é obtida separadamente. Ainda não há análise incremental exata de todas as estatísticas. A inferência de tipos, score de qualidade, classificação de tabelas e relacionamentos são heurísticos. A detecção de dados sensíveis é baseada em nomes de colunas e não é um classificador de conteúdo. Não há persistência de histórico ou IA.
+
+Sugestões de descoberta semântica e assistência para modelagem pertencem a uma possível V2; não são necessárias para instalar ou usar a V1.

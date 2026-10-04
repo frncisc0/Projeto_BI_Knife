@@ -180,3 +180,28 @@ def test_sensitive_columns_are_excluded_from_cross_file_relationship_matching():
     assert result["relationships"] == []
     assert "123.456.789-00" not in serialized
     assert "987.654.321-00" not in serialized
+
+
+def test_sensitive_columns_are_excluded_from_workbook_relationship_matching():
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    people = workbook.active
+    people.title = "Pessoas"
+    people.append(["CPF"])
+    people.append(["123.456.789-00"])
+    people.append(["987.654.321-00"])
+    payroll = workbook.create_sheet("Folha")
+    payroll.append(["CPF"])
+    payroll.append(["123.456.789-00"])
+    payroll.append(["987.654.321-00"])
+    content = BytesIO()
+    workbook.save(content)
+
+    report = analyze_file("sensitive.xlsx", "xlsx", content.getvalue())
+    serialized = json.dumps(report.model_dump(mode="json"), ensure_ascii=False)
+
+    assert report.relationships == []
+    assert all(column.sensitive for table in report.tables for column in table.column_analyses)
+    assert "123.456.789-00" not in serialized
+    assert "987.654.321-00" not in serialized

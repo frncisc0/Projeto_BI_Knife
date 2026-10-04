@@ -7,6 +7,14 @@ from app.core.config import get_settings
 from app.models.analysis_models import RelationshipCandidate, TableAnalysis
 
 
+NON_RELATIONAL_TERMS = {
+    "rank", "ranking", "score", "points", "point", "pontos", "nota", "valor", "value", "amount",
+    "custo", "cost", "risco", "risk", "total", "average", "avg", "media", "média", "quantity",
+    "quantidade", "count", "percent", "percentage", "percentual", "rate", "taxa", "indice", "índice",
+    "date", "data", "datetime", "month", "monthname", "ano", "year", "day",
+}
+
+
 def _normalized_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.casefold())
 
@@ -28,21 +36,32 @@ def _compatible_types(left: pd.Series, right: pd.Series) -> bool:
     return left_numeric == right_numeric and left_date == right_date
 
 
+def _has_non_relational_name(name: str) -> bool:
+    tokens = set(re.findall(r"[a-z0-9]+", name.casefold()))
+    return bool(tokens & NON_RELATIONAL_TERMS)
+
+
 def suggest_relationships(frames: dict[str, pd.DataFrame], tables: list[TableAnalysis]) -> list[RelationshipCandidate]:
     candidates: list[RelationshipCandidate] = []
     settings = get_settings()
     table_sampling = {table.name: table.sampled for table in tables}
     table_sampling.update({name: bool(frame.attrs.get("sampled", False)) for name, frame in frames.items()})
+    sensitive_columns = {table.name: {column.name for column in table.column_analyses if column.sensitive}
+                         for table in tables}
     limited_frames = dict(list(frames.items())[:settings.max_tables_to_analyze])
     for parent_name, parent in limited_frames.items():
         for child_name, child in limited_frames.items():
             if parent_name == child_name:
                 continue
             for parent_col in parent.columns:
+                if _has_non_relational_name(str(parent_col)) or str(parent_col) in sensitive_columns.get(parent_name, set()):
+                    continue
                 parent_values = parent[parent_col].dropna()
                 if parent_values.empty or parent_values.nunique() != len(parent_values):
                     continue
                 for child_col in child.columns:
+                    if _has_non_relational_name(str(child_col)) or str(child_col) in sensitive_columns.get(child_name, set()):
+                        continue
                     child_complete = child[child_col].dropna()
                     if (parent_values.nunique() == len(parent_values)
                             and child_complete.nunique() == len(child_complete)

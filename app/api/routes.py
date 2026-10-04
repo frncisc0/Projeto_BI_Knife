@@ -145,7 +145,7 @@ def _apply_integrity_quality(quality: dict, report_settings: dict, integrity_pct
         "Excelente" if score >= thresholds.get("excellent", 95)
         else "Boa" if score >= thresholds.get("good", 85)
         else "Atenção" if score >= thresholds.get("attention", 65)
-        else "Crítica"
+        else "Baixa"
     )
     quality["integrity_pct"] = round(integrity_pct, 1)
     quality["integrity_assessed"] = True

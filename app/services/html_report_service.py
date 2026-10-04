@@ -50,10 +50,13 @@ def _alert_html(alert: dict[str, Any], table_name: str = "") -> str:
     message = _text(alert.get("message", "Ponto para revisão"))
     quantity = f"<strong>{_number(count)} ocorrências</strong>" if isinstance(count, (int, float)) and count else ""
     context = f"<span class=\"muted\">Aba: {_text(table_name)}</span>" if table_name else ""
-    advice = "Verifique o contexto da coluna antes de usar o campo em relatórios ou relacionamentos." \
+    advice = _text(alert.get("recommendation")) if alert.get("recommendation") else "Verifique o contexto da coluna antes de usar o campo em relatórios ou relacionamentos." \
         if severity in {"critical", "attention"} else "Considere se o resultado é esperado para o processo analisado."
+    affected = (_text(alert.get("affected_columns")) if alert.get("affected_columns")
+                else "")
     return (f'<article class="alert {severity}"><span class="badge">{labels.get(severity, "Informação")}</span>'
-            f'<div><h4>{message}</h4>{quantity}{context}<p>{advice}</p></div></article>')
+            f'<div><h4>{message}</h4>{quantity}{context}'
+            f'{f"<p>Colunas afetadas: {affected}</p>" if affected else ""}<p>{advice}</p></div></article>')
 
 
 def _quality_bars(quality: dict[str, Any]) -> str:
@@ -98,7 +101,9 @@ def _key_html(table: dict[str, Any]) -> str:
     }
     columns = table.get("column_analyses", [])
     findings = [column for column in columns if column.get("key_assessment") in assessments]
-    if not findings:
+    composite_findings = [candidate for candidate in table.get("key_candidates", [])
+                          if len(candidate.get("columns", [])) > 1]
+    if not findings and not composite_findings:
         return '<p class="muted">Nenhuma coluna atendeu aos critérios de unicidade avaliados.</p>'
     result = []
     for column in findings:
@@ -106,6 +111,13 @@ def _key_html(table: dict[str, Any]) -> str:
                       f'{assessments[column["key_assessment"]]}</h4><strong>{_text(column.get("distinct_pct", 0))}% única'
                       f' · {_text(column.get("completeness_pct", 0))}% preenchida</strong>'
                       f'<p>{_text("; ".join(column.get("key_reasons", [])), "Avaliação heurística.")}</p></div></article>')
+    for candidate in composite_findings:
+        columns_text = " + ".join(str(name) for name in candidate.get("columns", []))
+        reasons = "; ".join(candidate.get("reasons", []))
+        result.append(f'<article class="alert information"><div><h4>{_text(columns_text)} · possível chave composta</h4>'
+                      f'<strong>{_text(candidate.get("uniqueness_pct", 0))}% de combinações únicas · '
+                      f'confiança {_text(candidate.get("confidence", "low"))}</strong>'
+                      f'<p>{_text(reasons)} Confirme a semântica e a regra de negócio.</p></div></article>')
     return "".join(result)
 
 
@@ -124,8 +136,9 @@ def _table_html(table: dict[str, Any], index: int) -> str:
       <summary><span>{_text(table.get("name"))}</span><span class="badge">{_text(_status(table.get("status")))}</span>
         <span>{_number(table.get("rows_available", table.get("rows")))} linhas</span>
         <span>{_number(table.get("columns"))} colunas</span><strong>{_text(quality.get("score", 0))}/100</strong></summary>
-      <div class="sheet-body"><div class="stats"><div><small>Linhas disponíveis / analisadas</small><b>{_number(table.get("rows_available", table.get("rows")))} / {_number(table.get("rows_analyzed"))}</b></div>
+      <div class="sheet-body"><div class="stats"><div><small>Linhas disponíveis / avaliadas</small><b>{_number(table.get("rows_available", table.get("rows")))} / {_number(table.get("rows_analyzed"))}</b></div>
         <div><small>Cabeçalho</small><b>{header_info}</b></div><div><small>Tipo provável</small><b>{_text(table.get("table_type"))} ({_text(table.get("table_type_confidence"))})</b></div>
+        <div><small>Amostragem</small><b>{_text(table.get("sampling_method", "none")) if table.get("sampled") else "Não aplicada"}</b></div>
         <div><small>Qualidade</small><b>{_text(quality.get("classification"))} · {_text(quality.get("score"))}/100</b></div></div>
         <div class="dimensions">{_quality_bars(quality)}</div>
         <h4>Alertas e observações</h4>{''.join(_alert_html(alert, str(table.get('name', ''))) for alert in alerts) or '<p class="muted">Nenhum alerta de qualidade.</p>'}
@@ -154,10 +167,16 @@ def render_html_report(batch: dict[str, Any]) -> str:
                                f'<div class="dimensions">{_quality_bars(report.get("quality", {}))}</div>'
                                f'<h3>Pontos de atenção</h3>{"".join(_alert_html(alert) for table in report.get("tables", []) for alert in _alerts(table.get("quality", {}))) or "<p class=\"muted\">Nenhum alerta.</p>"}'
                                f'<h3 id="sheets">Abas analisadas</h3>{"".join(_table_html(table, i) for i, table in enumerate(report.get("tables", [])))}'
+                               f'<h3 id="relationships">Relações potenciais</h3>{_relationships_html(report)}'
                                f'<h3 id="security">Segurança da análise</h3>{_security_html(report.get("security"))}'
                                f'<h3>Observações</h3>{_warnings_html(report)}'
                                f'<h3>Detalhes técnicos</h3><p class="muted">ID {_text(report.get("analysis_id"))} · '
-                               f'{_number(report.get("file_size_bytes"))} bytes · SHA-256 {_text(report.get("file_sha256"))}</p></section>'
+                               f'{_number(report.get("file_size_bytes"))} bytes · {_text(_duration(report.get("processing_time_ms", 0)))} · '
+                               f'SHA-256 {_text(report.get("file_sha256"))}</p>'
+                               f'<p class="muted">Limites/configuração: amostragem {_text("ativa" if report.get("settings", {}).get("sampling_enabled") else "desativada")}; '
+                               f'{_number(report.get("settings", {}).get("max_rows_to_analyze"))} linhas, '
+                               f'{_number(report.get("settings", {}).get("max_columns_to_analyze"))} colunas e '
+                               f'{_number(report.get("settings", {}).get("max_cells_to_analyze"))} células por tabela.</p></section>'
                                for filename, report in reports)
     failed_rows = "".join(f'<tr><td>{_text(item.get("filename"))}</td><td>{_text(item.get("error"))}</td></tr>'
                           for item in batch.get("results", []) if not item.get("analysis"))
@@ -181,13 +200,13 @@ def render_html_report(batch: dict[str, Any]) -> str:
       @media(max-width:650px){{header{{padding:26px 18px}}header h1{{font-size:25px}}main{{padding:0 12px 30px}}section{{padding:16px}}}}
       @media print{{body{{background:white;font-size:10pt}}header{{padding:18px 0;background:white;color:var(--ink);border-bottom:2px solid var(--green)}}nav{{display:none}}main{{max-width:none;margin:0;padding:0}}section,.panel,.sheet{{break-inside:avoid;box-shadow:none;margin:8px 0;padding:12px}}.sheet{{break-inside:auto}}.sheet:not([open])>.sheet-body{{display:block}}a{{color:inherit}}}}
       </style></head><body><header><strong>BI SWISS KNIFE</strong><h1>Diagnóstico de Dados</h1><p>Relatório local · sem prévia de linhas ou rótulos de categorias</p></header><main>
-      <nav aria-label="Navegação do relatório"><a href="#summary">Resumo</a><a href="#quality">Qualidade</a><a href="#sheets">Abas e estrutura</a><a href="#security">Segurança</a><a href="#technical">Técnico</a></nav>
+      <nav aria-label="Navegação do relatório"><a href="#summary">Resumo</a><a href="#quality">Qualidade</a><a href="#sheets">Abas e estrutura</a><a href="#relationships">Relações</a><a href="#security">Segurança</a><a href="#technical">Técnico</a></nav>
       <section id="summary"><h2>Resumo da seleção</h2><div class="cards"><div><small>Arquivos</small><strong>{_number(batch.get("file_count", len(batch.get("results", []))))}</strong></div>
-        <div><small>Abas</small><strong>{_number(total_sheets)}</strong></div><div><small>Registros analisados</small><strong>{_number(total_rows)}</strong></div>
-        <div><small>Colunas</small><strong>{_number(total_columns)}</strong></div><div><small>Alertas</small><strong>{_number(len(all_alerts))}</strong></div></div>
+        <div><small>Abas</small><strong>{_number(total_sheets)}</strong></div><div><small>Registros avaliados</small><strong>{_number(total_rows)}</strong></div>
+        <div><small>Colunas</small><strong>{_number(total_columns)}</strong></div><div><small>Tipos de alertas</small><strong>{_number(len(all_alerts))}</strong></div></div>
         <div class="table-scroll"><table><thead><tr><th>Arquivo</th><th>Status</th><th>Abas</th><th>Qualidade geral</th></tr></thead><tbody>{overview_rows or '<tr><td colspan="4">Nenhuma análise concluída.</td></tr>'}</tbody></table></div>
         {f'<h3>Arquivos com falha</h3><div class="table-scroll"><table><thead><tr><th>Arquivo</th><th>Motivo informado</th></tr></thead><tbody>{failed_rows}</tbody></table></div>' if failed_rows else ''}</section>
-      <section id="quality"><h2>Qualidade geral</h2>{''.join(f'<article class="panel"><h3>{_text(name)}</h3><div class="score"><strong>{_text(report.get("quality", {}).get("score"))}/100</strong><span>{_text(report.get("quality", {}).get("classification"))}</span></div><div class="dimensions">{_quality_bars(report.get("quality", {}))}</div></article>' for name, report in reports)}</section>
+      <section id="quality"><h2>Qualidade geral</h2><p class="muted">O score resume regras heurísticas; uma aba auxiliar, template ou destinada a preenchimento pode ter score baixo sem representar erro. Interprete junto às dimensões, aos alertas e ao contexto.</p>{''.join(f'<article class="panel"><h3>{_text(name)}</h3><div class="score"><strong>{_text(report.get("quality", {}).get("score"))}/100</strong><span>{_text(report.get("quality", {}).get("classification"))}</span></div><div class="dimensions">{_quality_bars(report.get("quality", {}))}</div></article>' for name, report in reports)}</section>
       {report_sections or '<section><p>Nenhum relatório disponível.</p></section>'}<section id="technical"><h2>Notas de interpretação</h2><p>Indicadores podem refletir amostragem quando ela foi aplicada. Confira os avisos de cada aba e valide regras de negócio antes de tomar decisões.</p><p>Valores fora da faixa de 1,5 × IQR são anomalias estatísticas e podem ser legítimos.</p></section>
       <footer class="muted">Gerado localmente pelo BI Swiss Knife. Nenhum serviço externo é necessário.</footer></main></body></html>'''
 
@@ -213,7 +232,8 @@ def _security_html(security: dict[str, Any] | None) -> str:
     formula_action = {"cached_values_only": "valores armazenados em cache; sem recálculo",
                       "not_applicable": "não aplicável"}.get(str(security.get("formulas_action")),
                                                                   str(security.get("formulas_action") or "não informado"))
-    return f'<ul>{summary}<li>Fórmulas: {_text(formula_action)}</li></ul>{active}'
+    return (f'<ul>{summary}<li>Fórmulas: {_text(formula_action)}</li>'
+            f'<li>Relações externas detectadas: {_number(security.get("external_relationship_count", 0))}</li></ul>{active}')
 
 
 def _warnings_html(report: dict[str, Any]) -> str:
@@ -221,3 +241,17 @@ def _warnings_html(report: dict[str, Any]) -> str:
     if not messages:
         return '<p class="muted">Nenhuma observação adicional.</p>'
     return "<ul>" + "".join(f"<li>{_text(message)}</li>" for message in messages) + "</ul>"
+
+
+def _relationships_html(report: dict[str, Any]) -> str:
+    relationships = report.get("relationships", [])
+    if not relationships:
+        return '<p class="muted">Nenhuma relação com evidência suficiente foi sugerida.</p>'
+    return "".join(
+        f'<article class="alert information"><div><h4>{_text(item.get("source_table"))}.{_text(item.get("source_column"))} '
+        f'→ {_text(item.get("target_table"))}.{_text(item.get("target_column"))}</h4>'
+        f'<strong>{_text(item.get("coverage_pct"))}% de correspondência · '
+        f'{_text(item.get("cardinality"))} · confiança {_text(item.get("confidence"))}</strong>'
+        f'<p>{_text(item.get("reason"))}</p></div></article>'
+        for item in relationships
+    )
