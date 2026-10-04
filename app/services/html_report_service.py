@@ -168,6 +168,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
                                f'<h3>Pontos de atenção</h3>{"".join(_alert_html(alert) for table in report.get("tables", []) for alert in _alerts(table.get("quality", {}))) or "<p class=\"muted\">Nenhum alerta.</p>"}'
                                f'<h3 id="sheets">Abas analisadas</h3>{"".join(_table_html(table, i) for i, table in enumerate(report.get("tables", [])))}'
                                f'<h3 id="relationships">Relações potenciais</h3>{_relationships_html(report)}'
+                               f'{_discovery_html(report)}'
                                f'<h3 id="security">Segurança da análise</h3>{_security_html(report.get("security"))}'
                                f'<h3>Observações</h3>{_warnings_html(report)}'
                                f'<h3>Detalhes técnicos</h3><p class="muted">ID {_text(report.get("analysis_id"))} · '
@@ -187,6 +188,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
       header{{padding:38px max(24px,calc((100vw - 1120px)/2));background:#14251b;color:white}}header strong{{letter-spacing:.13em;color:#9ee0b5;font-size:12px}}
       header h1{{font-size:32px;margin:10px 0 4px}}header p{{color:#c3d3c8;margin:0}}main{{max-width:1120px;margin:24px auto;padding:0 20px 50px}}
       nav{{position:sticky;top:0;background:#f5f8f6ee;padding:10px 0;display:flex;gap:8px;overflow:auto;z-index:2}}nav a{{white-space:nowrap;padding:8px 12px;border:1px solid var(--line);border-radius:99px;color:var(--green);text-decoration:none;background:white}}
+      .insight-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}}.insight-card{{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fbfdfb}}.insight-card p{{margin:7px 0;font-size:13px}}
       section,.panel,.sheet{{background:white;border:1px solid var(--line);border-radius:14px;padding:22px;margin:14px 0;scroll-margin-top:68px}}h2,h3{{line-height:1.2}}h2{{font-size:24px}}h3{{font-size:18px;margin:24px 0 12px}}h4{{font-size:14px;margin:3px 0 6px}}
       .muted,small{{color:var(--muted)}}.cards,.stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}}.cards>div,.stats>div,.metric{{padding:15px;background:var(--pale);border-radius:10px}}
       .cards small,.stats small{{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}}.cards strong,.stats b{{display:block;font-size:20px;margin-top:4px}}
@@ -200,7 +202,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
       @media(max-width:650px){{header{{padding:26px 18px}}header h1{{font-size:25px}}main{{padding:0 12px 30px}}section{{padding:16px}}}}
       @media print{{body{{background:white;font-size:10pt}}header{{padding:18px 0;background:white;color:var(--ink);border-bottom:2px solid var(--green)}}nav{{display:none}}main{{max-width:none;margin:0;padding:0}}section,.panel,.sheet{{break-inside:avoid;box-shadow:none;margin:8px 0;padding:12px}}.sheet{{break-inside:auto}}.sheet:not([open])>.sheet-body{{display:block}}a{{color:inherit}}}}
       </style></head><body><header><strong>BI SWISS KNIFE</strong><h1>Diagnóstico de Dados</h1><p>Relatório local · sem prévia de linhas ou rótulos de categorias</p></header><main>
-      <nav aria-label="Navegação do relatório"><a href="#summary">Resumo</a><a href="#quality">Qualidade</a><a href="#sheets">Abas e estrutura</a><a href="#relationships">Relações</a><a href="#security">Segurança</a><a href="#technical">Técnico</a></nav>
+      <nav aria-label="Navegação do relatório"><a href="#summary">Resumo</a><a href="#quality">Qualidade</a><a href="#sheets">Abas e estrutura</a><a href="#relationships">Relações</a><a href="#insights">Análises e blueprint</a><a href="#security">Segurança</a><a href="#technical">Técnico</a></nav>
       <section id="summary"><h2>Resumo da seleção</h2><div class="cards"><div><small>Arquivos</small><strong>{_number(batch.get("file_count", len(batch.get("results", []))))}</strong></div>
         <div><small>Abas</small><strong>{_number(total_sheets)}</strong></div><div><small>Registros avaliados</small><strong>{_number(total_rows)}</strong></div>
         <div><small>Colunas</small><strong>{_number(total_columns)}</strong></div><div><small>Tipos de alertas</small><strong>{_number(len(all_alerts))}</strong></div></div>
@@ -255,3 +257,39 @@ def _relationships_html(report: dict[str, Any]) -> str:
         f'<p>{_text(item.get("reason"))}</p></div></article>'
         for item in relationships
     )
+
+
+def _discovery_html(report: dict[str, Any]) -> str:
+    semantic = report.get("semantic_model") or {}
+    insight_block = report.get("insights") or {}
+    items = insight_block.get("items", [])
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    items = sorted(items, key=lambda item: priority_order.get(item.get("priority"), 3))[:12]
+    dimensions, measures, dates = (semantic.get(key, []) for key in ("dimensions", "measures", "dates"))
+    overview = (f'<p><b>Dimensões:</b> {_text(", ".join(item.get("name", "") for item in dimensions) or "Nenhuma identificada")}</p>'
+                f'<p><b>Medidas:</b> {_text(", ".join(item.get("name", "") for item in measures) or "Nenhuma identificada")}</p>'
+                f'<p><b>Datas:</b> {_text(", ".join(item.get("name", "") for item in dates) or "Nenhuma identificada")}</p>')
+    cards = []
+    for item in items:
+        fields = [*item.get("dimensions", []), *item.get("measures", []), *item.get("dates", [])]
+        field_names = ", ".join(f"{field.get('table')}.{field.get('column')}" for field in fields)
+        cards.append(
+            f'<article class="insight-card"><div><span class="badge">{_text(item.get("priority", "low"))} · {_text(item.get("type"))}</span> '
+            f'<span class="badge">Confiança: {_text(item.get("confidence"))}</span></div>'
+            f'<h4>{_text(item.get("title"))}</h4><p><b>Pergunta:</b> {_text(item.get("business_question"))}</p>'
+            f'<p><b>Campos:</b> {_text(field_names or "—")}</p><p><b>Visual:</b> {_text(item.get("visual"))}</p>'
+            f'<p><b>Por que foi sugerido:</b> {_text(item.get("reason"))}</p>'
+            f'<p><b>Evidências:</b> {_text(" ".join(item.get("evidence", [])))}</p></article>')
+    blueprint = report.get("dashboard_blueprint") or {}
+    pages = "".join(f'<li><b>{_text(page.get("name"))}</b>: {_text(page.get("purpose"))}</li>'
+                    for page in blueprint.get("recommended_pages", []))
+    if not semantic:
+        cards.append('<p class="muted">Este relatório foi criado sem a camada de descoberta semântica.</p>')
+    elif not items:
+        cards.append('<p class="muted">Não há combinações com evidência suficiente para sugerir análises.</p>')
+    return (f'<section id="insights"><h3>O que posso analisar?</h3>{overview}'
+            f'<h4>Principais oportunidades de análise</h4><div class="insight-grid">{"".join(cards)}</div>'
+            f'<h4>Blueprint sugerido de dashboard</h4><p>{_text(blueprint.get("objective", "Sem blueprint disponível."))}</p>'
+            f'<ul>{pages or "<li>Nenhuma página sugerida.</li>"}</ul>'
+            f'<p><b>Filtros candidatos:</b> {_text(", ".join(item.get("column", "") for item in blueprint.get("filters", [])) or "Nenhum")}</p>'
+            f'<p class="muted">Sugestões heurísticas derivadas dos metadados; valide confiança e regra de negócio antes de usar.</p></section>')

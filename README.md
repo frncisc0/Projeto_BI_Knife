@@ -6,7 +6,7 @@ Aplicação local para diagnosticar estrutura e qualidade de arquivos `.xlsx`, `
 
 A V1 responde o que existe no arquivo: abas, dimensões, colunas e tipos inferidos; possíveis identificadores e relações; ausência de valores, diferenças em relação aos tipos inferidos, duplicidades e anomalias estatísticas; score por dimensão; e sinais de conteúdo ativo ou relações externas. As classificações e sugestões são heurísticas e devem ser revistas com as regras do processo. Alta unicidade, sozinha, não confirma uma chave. Anomalia estatística não significa erro.
 
-A V1 não cria dashboards, KPIs, DAX, consultas Power Query nem modelos de dados automaticamente. Essas ideias são propostas para uma etapa futura e não fazem parte das funções atuais.
+A camada de descoberta semântica produz sugestões explicáveis de análises, KPIs candidatos e um Dashboard Blueprint a partir do AnalysisResult. O blueprint é uma especificação para revisão: não cria dashboards, DAX, consultas Power Query nem modelos automaticamente.
 
 ## Requisitos
 
@@ -79,6 +79,7 @@ Use `BI_QUALITY_*` para configurar os limites e pesos do score de qualidade; os 
 - Quando a presença de cabeçalho CSV é ambígua, a interface pergunta se a primeira linha é cabeçalho ou dado; também é possível manter nomes genéricos.
 - Conteúdo potencialmente ativo em Excel é reportado sem execução; relações externas não são seguidas nem atualizadas. Abas legíveis continuam sendo analisadas quando macros, conexões ou objetos são detectados.
 - O relatório JSON estruturado é baixado automaticamente ao concluir a análise; CSV-resumo, HTML offline expansível e PDF executivo local ficam disponíveis nos botões de exportação. HTML e PDF são derivados do resultado já calculado e não reabrem o arquivo fonte.
+- A descoberta semântica adiciona dimensões, medidas, datas e identificadores elegíveis, sugestões de ranking/comparação/tendência/KPI, razões candidatas e blueprint. Cada sugestão informa campos, evidência, confiança, prioridade e justificativa; combinações sem campos compatíveis não são criadas.
 - Campos com nomes que sugerem dados pessoais ou financeiros têm estatísticas suprimidas.
 - Interface em português e sem recursos externos obrigatórios.
 
@@ -92,6 +93,4 @@ Os dados de teste são sintéticos. Consulte [docs/architecture.md](docs/archite
 
 ## Limitações atuais
 
-O relatório usa amostragem limitada para profiling em arquivos grandes e identifica quando isso ocorre; a contagem total de linhas é obtida separadamente. Ainda não há análise incremental exata de todas as estatísticas. A inferência de tipos, score de qualidade, classificação de tabelas e relacionamentos são heurísticos. A detecção de dados sensíveis é baseada em nomes de colunas e não é um classificador de conteúdo. Não há persistência de histórico ou IA.
-
-Sugestões de descoberta semântica e assistência para modelagem pertencem a uma possível V2; não são necessárias para instalar ou usar a V1.
+O relatório usa amostragem limitada para profiling em arquivos grandes e identifica quando isso ocorre; a contagem total de linhas é obtida separadamente. Ainda não há análise incremental exata de todas as estatísticas. A inferência de tipos, score de qualidade, classificação de tabelas, relacionamentos e descoberta de análises são heurísticos. A detecção de dados sensíveis é baseada em nomes de colunas e não é um classificador de conteúdo. O blueprint não valida regras de negócio, não executa fórmulas, não contém DAX e não cria visuais finais. Não há persistência de histórico nem IA externa.

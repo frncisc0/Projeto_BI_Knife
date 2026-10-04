@@ -171,7 +171,33 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
     else:
         story.append(Paragraph("Nenhuma relação com evidência suficiente foi sugerida.", styles["BodyText"]))
 
-    story.append(Paragraph("7. Segurança", styles["Section"]))
+    story.append(Paragraph("7. Principais oportunidades de análise", styles["Section"]))
+    for filename, report in reports:
+        candidates = (report.get("insights") or {}).get("items", [])
+        candidates = [item for item in candidates if item.get("priority") in {"high", "medium"}]
+        candidates.sort(key=lambda item: (0 if item.get("priority") == "high" else 1, item.get("type", ""), item.get("title", "")))
+        if not candidates:
+            story.append(Paragraph(f"{_safe(filename)}: não há sugestões com evidência suficiente.", styles["SmallText"]))
+            continue
+        story.append(Paragraph(_safe(filename), styles["Heading4"]))
+        for item in candidates[:8]:
+            refs = [*item.get("dimensions", []), *item.get("measures", []), *item.get("dates", [])]
+            fields = ", ".join(f"{ref.get('table')}.{ref.get('column')}" for ref in refs)
+            story.append(KeepTogether([Paragraph(
+                f"<b>{_safe(item.get('title'))}</b> · {_safe(item.get('priority'))} · confiança {_safe(item.get('confidence'))}<br/>"
+                f"Pergunta: {_safe(item.get('business_question'))}<br/>Campos: {_safe(fields)}<br/>"
+                f"Visual: {_safe(item.get('visual'))}<br/>Por que: {_safe(item.get('reason'))}", styles["AlertText"]),
+                Spacer(1, 2 * mm)]))
+        blueprint = report.get("dashboard_blueprint") or {}
+        story.append(Paragraph("Blueprint sugerido de dashboard", styles["Heading4"]))
+        for page in blueprint.get("recommended_pages", [])[:4]:
+            story.append(Paragraph(f"• <b>{_safe(page.get('name'))}</b>: {_safe(page.get('purpose'))}", styles["SmallText"]))
+        kpis = (report.get("kpis") or {}).get("suggested", [])
+        kpi_names = [item.get("name", "") for item in kpis if item.get("priority") in {"high", "medium"}][:8]
+        if kpi_names:
+            story.append(Paragraph(f"KPIs candidatos: {_safe(', '.join(kpi_names))}", styles["SmallText"]))
+
+    story.append(Paragraph("8. Segurança", styles["Section"]))
     checks = []
     for filename, report in reports:
         security = report.get("security") or {}
@@ -186,7 +212,7 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
                        else "Nenhum conteúdo potencialmente ativo detectado."])
     story.append(_simple_table([["Arquivo", "Proteções", "Observação"], *checks], LongTable, TableStyle, Paragraph,
                                styles, [48 * mm, 81 * mm, 47 * mm], repeat_rows=1))
-    story.append(Paragraph("8. Observações", styles["Section"]))
+    story.append(Paragraph("9. Observações", styles["Section"]))
     story.append(Paragraph("Os resultados são heurísticos e podem refletir amostragem. Valores fora da faixa de 1,5 × IQR "
                            "podem ser legítimos e não representam necessariamente erros. Verifique as regras de negócio "
                            "antes de usar candidatos a identificador ou relacionamentos.", styles["BodyText"]))
@@ -194,7 +220,7 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         for warning in [*report.get("warnings", []), *report.get("security_warnings", [])][:30]:
             story.append(Paragraph("• " + _safe(warning), styles["SmallText"]))
 
-    story.append(Paragraph("9. Anomalias", styles["Section"]))
+    story.append(Paragraph("10. Anomalias", styles["Section"]))
     anomaly_rows = [["Arquivo", "Coluna", "Método", "Ocorrências", "Gravidade", "Descrição"]]
     for filename, report in reports:
         for anomaly in report.get("anomalies", []):
@@ -208,7 +234,7 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         story.append(_simple_table(anomaly_rows, LongTable, TableStyle, Paragraph, styles,
                                    [30 * mm, 30 * mm, 29 * mm, 19 * mm, 21 * mm, 47 * mm], repeat_rows=1))
 
-    story.append(Paragraph("10. Detalhes técnicos", styles["Section"]))
+    story.append(Paragraph("11. Detalhes técnicos", styles["Section"]))
     technical_rows = [["Arquivo", "Tipo", "Tamanho", "Linhas analisadas / disponíveis", "Colunas", "Amostragem"]]
     for filename, report in reports:
         tables = report.get("tables", [])

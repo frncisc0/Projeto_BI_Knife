@@ -11,7 +11,7 @@ from app.core.exceptions import AnalysisError, FileValidationError
 from app.analyzers.relationship_analyzer import suggest_relationships
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
-from app.services.report_service import report_payload
+from app.services.report_service import report_payload, refresh_discovery_payload
 from app.services.html_report_service import render_html_report
 from app.services.pdf_report_service import render_pdf_report
 from app.services.progress_tracker import create_analysis_job, get_analysis_job
@@ -272,6 +272,7 @@ async def _analyze_batch_impl(
         _apply_integrity_quality(report["quality"], report["settings"], integrity)
         for table in report["tables"]:
             _apply_integrity_quality(table["quality"], report["settings"], integrity)
+        refresh_discovery_payload(report)
     relationship_frames.clear()
     if progress_callback:
         progress_callback({"stage": "finalizing", "current_file": len(uploads),
