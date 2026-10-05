@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0 — 2026-10-04
+
+- Interface com navegação para visão geral, diagnóstico, semântica, análises, KPIs, blueprint e segurança.
+- Insights ordenados por relevance score heurístico, com filtros de prioridade e tipo e perguntas de negócio mais específicas.
+- Tendências condicionadas a cobertura mensal, número de datas distintas e completude; outliers sugeridos somente quando presentes no AnalysisResult.
+- Candidatos a cálculos e Dashboard Blueprint visíveis na interface sem execução de fórmulas ou DAX.
+
 ## 0.3.0 — 2026-10-02
 
 ### Added

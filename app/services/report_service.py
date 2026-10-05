@@ -21,7 +21,7 @@ def report_payload(analysis: FileAnalysis) -> dict:
 def discovery_payload(analysis: FileAnalysis) -> dict:
     """Build V2 discovery blocks from an already computed AnalysisResult."""
     semantic = build_semantic_model(analysis)
-    insights, kpis = discover_insights(semantic)
+    insights, kpis = discover_insights(semantic, analysis.quality.score, analysis)
     semantic.calculated_candidates = [item.model_dump(mode="json") for item in kpis.calculation_candidates]
     blueprint = build_dashboard_blueprint(semantic, insights, kpis)
     return {

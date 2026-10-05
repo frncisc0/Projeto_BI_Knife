@@ -1,6 +1,9 @@
 import json
+from datetime import date
+from io import BytesIO
 from unittest.mock import patch
 
+from openpyxl import Workbook
 from app.models.analysis_models import RelationshipCandidate
 from app.services.analysis_service import analyze_file
 from app.services.html_report_service import render_html_report
@@ -9,16 +12,24 @@ from app.services.report_service import report_payload
 
 
 def _report():
-    content = (
-        "Contratada,Status,Risco Total,Risco Coberto,Risco Descoberto,Custo de Rescisão,Início,Contrato SAP,Email\n"
-        "Fornecedor A,Ativo,100,70,30,25,2026-01-01,SAP-001,a@example.test\n"
-        "Fornecedor B,Ativo,200,140,60,50,2026-01-02,SAP-002,b@example.test\n"
-        "Fornecedor C,Encerrado,300,210,90,75,2026-01-03,SAP-003,c@example.test\n"
-        "Fornecedor D,Ativo,400,280,120,100,2026-01-04,SAP-004,d@example.test\n"
-        "Fornecedor E,Ativo,500,350,150,125,2026-01-05,SAP-005,e@example.test\n"
-        "Fornecedor F,Encerrado,600,420,180,150,2026-01-06,SAP-006,f@example.test\n"
-    ).encode()
-    return analyze_file("synthetic-sensitive.csv", "csv", content, "utf-8", header_mode="true")
+    return _xlsx_report(
+        ["Contratada", "Status", "Risco Total", "Risco Coberto", "Risco Descoberto", "Custo de Rescisão", "Início", "Contrato SAP", "Email"],
+        [[f"Fornecedor {letter}", "Ativo" if letter != "C" else "Encerrado", index * 100, index * 70,
+          index * 30, index * 25, date(2026, index, 1), f"SAP-{index:03d}", f"{letter.lower()}@example.test"]
+         for index, letter in enumerate("ABCDEF", 1)],
+        "synthetic-sensitive.xlsx",
+    )
+
+
+def _xlsx_report(headers, rows, filename="synthetic.xlsx"):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return analyze_file(filename, "xlsx", buffer.getvalue())
 
 
 def _payload():
@@ -48,7 +59,8 @@ def test_discovery_generates_ranking_comparison_kpi_trend_and_coverage_candidate
     payload = _payload()
     items = payload["insights"]["items"]
     types = {item["type"] for item in items}
-    assert {"ranking", "distribution", "kpi", "trend", "coverage"} <= types
+    assert {"ranking", "comparison", "kpi", "trend", "coverage"} <= types
+    assert "correlation" not in types
     assert any(item["title"] == "% Cobertura" for item in items)
     candidate = payload["kpis"]["calculation_candidates"][0]
     assert candidate["numerator"] == "Risco Coberto"
@@ -61,6 +73,70 @@ def test_comparison_is_suggested_for_a_moderate_cardinality_dimension():
     report = analyze_file("comparison.csv", "csv", content.encode(), "utf-8", header_mode="true")
     items = report_payload(report)["insights"]["items"]
     assert any(item["type"] == "comparison" for item in items)
+
+
+def test_relevance_score_orders_risk_ranking_above_generic_measures():
+    items = _payload()["insights"]["items"]
+    risk = next(item for item in items if item["title"] == "Risco Descoberto por Contratada")
+    generic = next(item for item in items if item["type"] == "kpi" and item["title"] == "Custo de Rescisão")
+    assert 0 <= risk["relevance_score"] <= 100
+    assert risk["priority"] == "high"
+    assert risk["relevance_score"] > generic["relevance_score"]
+    kpis = _payload()["kpis"]["suggested"]
+    assert [item["relevance_score"] for item in kpis] == sorted(
+        (item["relevance_score"] for item in kpis), reverse=True)
+
+
+def test_relevance_score_penalizes_warnings_and_low_quality():
+    from app.insights.engine import _relevance_score
+
+    semantic = _payload()["semantic_model"]
+    dimension = next(field for field in semantic["dimensions"] if field["name"] == "Contratada")
+    measure = next(field for field in semantic["measures"] if field["name"] == "Risco Descoberto")
+    from app.models.discovery_models import SemanticField
+    dimension_field, measure_field = SemanticField.model_validate(dimension), SemanticField.model_validate(measure)
+    baseline = _relevance_score("ranking", [dimension_field], [measure_field], [], "high", [], 100)
+    penalized = _relevance_score("ranking", [dimension_field], [measure_field], [], "high", ["warning"], 50)
+    assert penalized < baseline
+
+
+def test_business_questions_use_natural_templates_for_common_dimensions():
+    from app.insights.engine import _business_question
+
+    assert _business_question("Contratada", "Risco Descoberto")[2] == "Quais contratadas apresentam maior risco descoberto?"
+    assert _business_question("Empresa Enel", "Risco Total")[2] == "Como o risco total está distribuído entre as empresas Enel?"
+    assert _business_question("Diretoria", "Custo da Folha")[2] == "Quais diretorias concentram maior custo da folha?"
+
+
+def test_date_name_alone_does_not_create_a_trend():
+    report = _xlsx_report(["Data", "Custo Total"],
+                          [[date(2026, 1, index), index * 100] for index in range(1, 7)], "one-month.xlsx")
+    semantic = report_payload(report)["semantic_model"]
+    assert semantic["dates"][0]["temporal_support"] is False
+    assert not any(item["type"] == "trend" for item in report_payload(report)["insights"]["items"])
+
+
+def test_outlier_suggestion_requires_anomaly_evidence_in_analysis_result():
+    report = _xlsx_report(["Risco Total"], [[value] for value in [1, 2, 3, 4, 5, 6, 7, 1000]], "outlier.xlsx")
+    payload = report_payload(report)
+    outliers = [item for item in payload["insights"]["items"] if item["type"] == "outlier"]
+    assert outliers
+    assert "AnalysisResult registrou" in " ".join(outliers[0]["evidence"])
+    regular = _xlsx_report(["Risco Total"], [[value] for value in range(1, 9)], "no-outlier.xlsx")
+    assert not any(item["type"] == "outlier" for item in report_payload(regular)["insights"]["items"])
+
+
+def test_current_interface_uses_v21_brand_and_exposes_discovery_views():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    index = (root / "frontend" / "index.html").read_text(encoding="utf-8")
+    script = (root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "BI SWISS KNIFE · V2.1" in index
+    assert "Diagnóstico · Semântica · Insights · Dashboard Blueprint" in index
+    assert "V0.3.0" not in index and "FERRAMENTA DE DIAGNÓSTICO DE DADOS" not in index
+    for view in ("Visão Geral", "Diagnóstico", "Semântica", "Análises", "KPIs", "Dashboard Blueprint", "Segurança"):
+        assert view in script
 
 
 def test_insights_have_confidence_priority_evidence_and_explanation():

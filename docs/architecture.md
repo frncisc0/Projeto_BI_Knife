@@ -27,6 +27,7 @@ JSON → HTML / PDF offline
 - **Semantic Layer:** organiza os papéis já presentes no `AnalysisResult`; ignora campos marcados como sensíveis e não relê arquivos nem DataFrames.
 - **Insight Discovery:** cruza campos da mesma aba com evidência suficiente, aplica confiança/prioridade e explica cada sugestão; não chama serviços externos nem calcula valores derivados.
 - **Dashboard Blueprint:** organiza sugestões elegíveis em páginas, KPIs candidatos e filtros para revisão; não gera dashboard final.
+- **Interface V2.1:** consome os blocos já devolvidos pela API, apresenta prioridades e filtros sem recalcular semântica no navegador. O relevance score usa pesos documentados em `app/insights/engine.py` e permanece oculto como número na experiência do usuário.
 - **Schemas:** definem os contratos independentes dos DataFrames usados internamente.
 - **Segurança/configuração:** concentram validação de arquivo, limites e padrões.
 

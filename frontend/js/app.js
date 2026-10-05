@@ -362,30 +362,153 @@ function qualityColumnHints(tables) {
     ? `<p class="subtle">Colunas com valores incompatíveis: ${inconsistent.map(escapeHtml).join(', ')}.</p>` : '';
 }
 
+const v21Views = [['overview', 'Visão Geral'], ['diagnosis', 'Diagnóstico'], ['semantics', 'Semântica'],
+  ['insights', 'Análises'], ['kpis', 'KPIs'], ['blueprint', 'Dashboard Blueprint'], ['security', 'Segurança']];
+const priorityLabels = { high: 'Alta prioridade', medium: 'Média prioridade', low: 'Baixa prioridade' };
+const insightTypeLabels = { ranking: 'Ranking', comparison: 'Comparação', trend: 'Tendência', kpi: 'KPI',
+  distribution: 'Distribuição', outlier: 'Outlier', correlation: 'Correlação', coverage: 'Cobertura',
+  segmentation: 'Segmentação', detail_table: 'Tabela detalhada' };
+
 function renderFileDetails(report) {
   const target = document.querySelector('#file-details');
-  const tabs = [['summary', 'Resumo'], ['structure', 'Estrutura'], ['columns', 'Colunas'], ['quality', 'Qualidade'], ['keys', 'Chaves'], ['relationships', 'Relacionamentos'], ['anomalies', 'Anomalias'], ['statistics', 'Estatísticas']];
-  const securityPanel = report.security ? `<div class="panel"><h3>Segurança do arquivo</h3><div class="relationship">Conteúdo potencialmente ativo detectado: ${report.security.active_content_detected ? 'Sim' : 'Não'}</div><div class="relationship">Tipos identificados: ${escapeHtml(report.security.active_content_types.join(', ') || 'nenhum')}</div><div class="relationship">Conteúdo ativo executado: Não · ação: ${escapeHtml(report.security.active_content_action)}</div><div class="relationship">Relações externas seguidas: Não (${report.security.external_relationship_count} detectada(s)) · conexões externas atualizadas: Não</div><div class="relationship">Macros executadas: Não · objetos incorporados executados: Não · fórmulas recalculadas: Não (${escapeHtml(report.security.formulas_action)})</div></div>` : '';
-  target.innerHTML = `<div class="subtle">${escapeHtml(report.filename)} · status ${escapeHtml(report.status)} · ${report.tables.length} aba(s) · ${(report.file_size_bytes / 1048576).toFixed(2)} MB · analisado em ${escapeHtml(new Date(report.analyzed_at).toLocaleString('pt-BR'))}</div>
-    <div class="metric-grid dashboard-grid"><div class="metric"><label>TABELAS</label><strong>${report.tables.length}</strong></div><div class="metric"><label>LINHAS DISPONÍVEIS</label><strong>${report.tables.reduce((sum, table) => sum + table.rows, 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>COLUNAS</label><strong>${report.tables.reduce((sum, table) => sum + table.columns, 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>NULOS</label><strong>${report.tables.reduce((sum, table) => sum + table.column_analyses.reduce((n, column) => n + column.null_count, 0), 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>DUPLICIDADES</label><strong>${report.tables.reduce((sum, table) => sum + table.duplicate_rows, 0).toLocaleString('pt-BR')}</strong></div><div class="metric"><label>CHAVES POSSÍVEIS</label><strong>${report.tables.reduce((sum, table) => sum + table.key_candidates.length, 0)}</strong></div><div class="metric"><label>RELACIONAMENTOS</label><strong>${report.relationships.length}</strong></div><div class="metric"><label>PONTOS DE ATENÇÃO</label><strong>${report.tables.reduce((sum, table) => sum + table.quality.alerts.filter(alert => alert.severity !== 'ok').length, 0)}</strong></div><div class="metric"><label>QUALIDADE</label><strong class="${report.quality.classification === 'Baixa' ? 'quality-bad' : ''}">${escapeHtml(report.quality.classification)}</strong></div></div>
-    <div class="panel table-head"><label for="table-select">Tabela/aba</label><select class="table-select" id="table-select">${report.tables.map((table, i) => `<option value="${i}">${escapeHtml(table.name)}</option>`).join('')}</select></div>
-    <nav class="diagnostic-tabs" aria-label="Seções do diagnóstico">${tabs.map(([id, label], index) => `<button class="diagnostic-tab${index === 0 ? ' active' : ''}" data-tab="${id}">${label}</button>`).join('')}</nav>
-    <div id="diagnostic-content"></div>
-    ${securityPanel}
-    <div class="panel privacy-note">Prévia dos dados desativada: este relatório não contém valores de células nem rótulos de categorias.</div>
-    <div class="panel"><h3>Privacidade e importação</h3><div class="subtle">SHA-256: ${escapeHtml(report.file_sha256)} · configurações CSV e limites registrados no relatório JSON.</div>${report.security_warnings.map(warning => `<div class="subtle">${escapeHtml(warning)}</div>`).join('')}</div>
-    ${report.warnings.map(warning => `<div class="warning">⚠ ${escapeHtml(warning)}</div>`).join('')}`;
-  let activeTab = 'summary';
-  const selector = target.querySelector('#table-select');
-  const content = target.querySelector('#diagnostic-content');
-  const renderTab = () => {
-    const table = report.tables[Number(selector.value)];
-    target.querySelectorAll('.diagnostic-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === activeTab));
-    content.innerHTML = tabContent(activeTab, report, table);
+  const state = { view: 'overview', diagnosticTab: 'summary', tableIndex: 0,
+    priority: 'all', type: 'all', showAllInsights: false, showAllKpis: false };
+  target.innerHTML = `<div class="subtle">${escapeHtml(report.filename)} · status ${escapeHtml(report.status)} · analisado em ${escapeHtml(new Date(report.analyzed_at).toLocaleString('pt-BR'))}</div>
+    <nav class="v21-nav" aria-label="Navegação da análise">${v21Views.map(([id, label]) => `<button class="v21-nav-button${id === state.view ? ' active' : ''}" data-view="${id}">${label}</button>`).join('')}</nav>
+    <div id="v21-content"></div>`;
+  const content = target.querySelector('#v21-content');
+  const render = () => {
+    target.querySelectorAll('.v21-nav-button').forEach(tab => tab.classList.toggle('active', tab.dataset.view === state.view));
+    const renderer = {
+      overview: () => renderV21Overview(report),
+      diagnosis: () => renderV21Diagnosis(report, state),
+      semantics: () => renderV21Semantics(report),
+      insights: () => renderV21Insights(report, state),
+      kpis: () => renderV21Kpis(report, state),
+      blueprint: () => renderV21Blueprint(report),
+      security: () => renderV21Security(report),
+    }[state.view];
+    content.innerHTML = renderer();
+    bindV21ViewEvents(report, state, render);
   };
-  selector.addEventListener('change', renderTab);
-  target.querySelectorAll('.diagnostic-tab').forEach(tab => tab.addEventListener('click', () => { activeTab = tab.dataset.tab; renderTab(); }));
-  renderTab();
+  target.querySelectorAll('.v21-nav-button').forEach(tab => tab.addEventListener('click', () => { state.view = tab.dataset.view; render(); }));
+  render();
+}
+
+function v21Metric(label, value, note = '') {
+  return `<div class="metric"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong>${note ? `<span class="subtle">${escapeHtml(note)}</span>` : ''}</div>`;
+}
+
+function renderV21Overview(report) {
+  const semantic = report.semantic_model || {};
+  const insights = report.insights?.items || [];
+  const counts = [
+    ['Dimensões', semantic.dimensions?.length || 0], ['Medidas', semantic.measures?.length || 0],
+    ['Datas', semantic.dates?.length || 0], ['Identificadores', semantic.identifiers?.length || 0],
+    ['Relacionamentos', semantic.relationships?.length ?? report.relationships?.length ?? 0],
+    ['Insights', insights.length], ['KPIs', report.kpis?.suggested?.length || 0],
+  ];
+  const rows = report.tables.reduce((sum, table) => sum + Number(table.rows_analyzed || 0), 0);
+  const columns = report.tables.reduce((sum, table) => sum + Number(table.columns_analyzed || table.columns || 0), 0);
+  return `<section class="panel executive-panel"><div class="v21-eyebrow">BI SWISS KNIFE · V2.1</div><h2>${escapeHtml(report.filename)}</h2>
+    <p class="subtle">${report.tables.length} abas · ${columns.toLocaleString('pt-BR')} colunas · ${rows.toLocaleString('pt-BR')} registros avaliados</p>
+    <div class="metric-grid dashboard-grid">${v21Metric('QUALIDADE GERAL', `${Number(report.quality.score || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}/100`, report.quality.classification)}</div></section>
+    <section class="panel"><h3>O que o Swiss Knife encontrou</h3><div class="metric-grid dashboard-grid">${counts.map(([label, value]) => v21Metric(label.toUpperCase(), Number(value).toLocaleString('pt-BR'))).join('')}</div></section>
+    <section class="panel"><h3>Da estrutura à decisão</h3><p class="journey">Diagnóstico <span>→</span> Semântica <span>→</span> Análises <span>→</span> Priorização <span>→</span> KPIs <span>→</span> Blueprint</p>
+    <p class="subtle">As prioridades são heurísticas explicáveis: o nome de um campo é apenas uma evidência, não uma conclusão de negócio.</p></section>`;
+}
+
+function renderSemanticFields(fields, emptyText) {
+  return fields?.length ? `<ul class="semantic-field-list">${fields.map(field => `<li><span>${escapeHtml(field.name)}</span><small>${escapeHtml(field.confidence)}${field.format ? ` · ${escapeHtml(field.format)}` : ''}</small></li>`).join('')}</ul>` : `<p class="subtle">${escapeHtml(emptyText)}</p>`;
+}
+
+function renderV21Semantics(report) {
+  const model = report.semantic_model || {};
+  const tables = model.tables || [];
+  const tableCards = tables.map(table => {
+    const relations = (model.relationships || []).filter(relation => relation.source_table === table.name || relation.target_table === table.name);
+    const warnings = (model.semantic_warnings || []).filter(warning => warning.includes(table.name));
+    return `<article class="semantic-card"><div class="card-heading"><div><h3>${escapeHtml(table.name)}</h3><p>${escapeHtml(table.table_type)} · confiança ${escapeHtml(table.confidence)}</p></div></div>
+      <div class="semantic-grid"><div><h4>Dimensões</h4>${renderSemanticFields(table.dimensions, 'Nenhuma elegível')}</div>
+      <div><h4>Medidas</h4>${renderSemanticFields(table.measures, 'Nenhuma elegível')}</div>
+      <div><h4>Datas</h4>${renderSemanticFields(table.dates, 'Nenhuma identificada')}</div>
+      <div><h4>Identificadores</h4>${renderSemanticFields(table.identifiers, 'Nenhum candidato')}</div></div>
+      <details><summary>Evidências e contexto</summary><p>${escapeHtml(table.reason)}</p>${(table.evidence || []).map(item => `<p class="subtle">${escapeHtml(item)}</p>`).join('')}
+      ${warnings.map(item => `<p class="warning">${escapeHtml(item)}</p>`).join('')}</details></article>`;
+  }).join('');
+  const relationships = (model.relationships || []).map(relation => `<article class="relationship-card"><div class="relation-flow"><b>${escapeHtml(relation.source_table)}</b><span>↓</span><b>${escapeHtml(relation.source_column)}</b><span>→</span><b>${escapeHtml(relation.target_table)}</b><span>↓</span><b>${escapeHtml(relation.target_column)}</b></div>
+    <p>Confiança: ${escapeHtml(relation.confidence)} · ${escapeHtml(relation.relationship_type)}</p><details><summary>Evidências e avisos</summary><p>${escapeHtml(relation.reason)}</p><p class="subtle">Relacionamento heurístico: confirme a semântica e as chaves antes de usar.</p></details></article>`).join('');
+  return `<section class="panel"><h2>Entendimento semântico</h2><p class="subtle">Classificações fornecidas pelo Semantic Model do backend; não são recalculadas na interface.</p>
+    <p>Tipo global: <b>${escapeHtml(model.table_type || 'desconhecida')}</b> · confiança ${escapeHtml(model.table_type_confidence || 'low')} · domínios candidatos: ${escapeHtml((model.business_domains || []).join(', ') || 'não identificados')}</p>
+    ${tableCards || '<p class="subtle">Nenhuma tabela com evidência semântica suficiente.</p>'}</section>
+    <section class="panel"><h3>Relacionamentos semânticos</h3>${relationships || '<p class="subtle">Nenhum relacionamento semântico disponível.</p>'}
+    ${(model.semantic_warnings || []).map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join('')}</section>`;
+}
+
+function renderInsightCard(item) {
+  const references = list => (list || []).map(field => `${field.table}.${field.column}`).join(', ') || '—';
+  const priority = priorityLabels[item.priority] || 'Prioridade não definida';
+  return `<article class="insight-card"><div class="insight-badges"><span class="priority-badge priority-${escapeHtml(item.priority)}">${escapeHtml(priority)}</span><span class="pill">${escapeHtml(insightTypeLabels[item.type] || item.type)}</span></div>
+    <h3>${escapeHtml(item.title)}</h3><p class="business-question">${escapeHtml(item.business_question)}</p>
+    <div class="insight-fields"><div><small>Dimensão</small><b>${escapeHtml(references(item.dimensions))}</b></div><div><small>Medida</small><b>${escapeHtml(references(item.measures))}</b></div>${item.dates?.length ? `<div><small>Data</small><b>${escapeHtml(references(item.dates))}</b></div>` : ''}</div>
+    <p><small>Visual recomendado</small><br><b>${escapeHtml(item.visual)}</b> · confiança ${escapeHtml(item.confidence)}</p>
+    <details><summary>Por que foi sugerido?</summary><p>${escapeHtml(item.reason)}</p><p><b>Evidências:</b></p><ul>${(item.evidence || []).map(evidence => `<li>${escapeHtml(evidence)}</li>`).join('')}</ul>${(item.warnings || []).map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join('')}</details></article>`;
+}
+
+function renderV21Insights(report, state) {
+  const items = report.insights?.items || [];
+  const filtered = items.filter(item => (state.priority === 'all' || item.priority === state.priority)
+    && (state.type === 'all' || item.type === state.type));
+  const visible = state.showAllInsights ? filtered : filtered.slice(0, 5);
+  const typeOptions = Object.keys(insightTypeLabels).map(type => `<option value="${escapeHtml(type)}"${state.type === type ? ' selected' : ''}>${escapeHtml(insightTypeLabels[type])}</option>`).join('');
+  return `<section class="panel"><div class="table-head"><div><h2>Principais análises</h2><p class="subtle">Ordenadas pela relevância estimada. O score numérico não é uma métrica empresarial.</p></div><label>Tipo <select id="insight-type-filter" class="table-select"><option value="all">Todos os tipos</option>${typeOptions}</select></label></div>
+    <div class="filter-row">${[['all','Todas'],['high','Alta'],['medium','Média'],['low','Baixa']].map(([key,label]) => `<button class="filter-button${state.priority === key ? ' active' : ''}" data-priority="${key}">${label}</button>`).join('')}</div>
+    <p class="subtle">${filtered.length} análise(s) compatível(is) com os filtros.</p><div class="insight-grid">${visible.map(renderInsightCard).join('') || '<p class="subtle">Nenhuma análise atende a estes filtros.</p>'}</div>
+    ${filtered.length > 5 ? `<button id="toggle-insights" class="secondary-button">${state.showAllInsights ? 'Mostrar principais' : 'Ver todas as análises'}</button>` : ''}</section>`;
+}
+
+function renderV21Kpis(report, state) {
+  const kpis = report.kpis?.suggested || [];
+  const visible = state.showAllKpis ? kpis : kpis.slice(0, 8);
+  const calculations = report.kpis?.calculation_candidates || [];
+  return `<section class="panel"><h2>KPIs sugeridos</h2><p class="subtle">Ordenados por relevância; a prioridade não valida a regra de negócio.</p><div class="insight-grid">${visible.map(kpi => `<article class="kpi-card"><span class="priority-badge priority-${escapeHtml(kpi.priority)}">${escapeHtml(priorityLabels[kpi.priority] || kpi.priority)}</span><h3>${escapeHtml(kpi.name)}</h3><p>${escapeHtml(kpi.table)} · ${escapeHtml(kpi.measure?.column || kpi.calculation_candidate?.numerator || 'cálculo candidato')}</p><p>Confiança: ${escapeHtml(kpi.confidence)}</p><details><summary>Justificativa</summary><p>${escapeHtml(kpi.reason)}</p></details></article>`).join('') || '<p class="subtle">Nenhum KPI elegível foi sugerido.</p>'}</div>
+    ${kpis.length > 8 ? `<button id="toggle-kpis" class="secondary-button">${state.showAllKpis ? 'Mostrar principais' : 'Ver todos os KPIs'}</button>` : ''}</section>
+    <section class="panel"><h3>Cálculos que podem ser derivados</h3><p class="subtle">Candidatos não validados; nenhuma fórmula ou DAX foi executado.</p>${calculations.map(calc => `<article class="calculation-card"><div><span class="pill">CÁLCULO CANDIDATO</span> · confiança ${escapeHtml(calc.confidence)}</div><h3>${escapeHtml(calc.name)}</h3><div class="fraction"><span>${escapeHtml(calc.numerator)}</span><i></i><span>${escapeHtml(calc.denominator)}</span></div><p>${escapeHtml(calc.reason)}</p><p class="subtle">Valide a fórmula, os filtros e a regra de negócio antes de calcular.</p></article>`).join('') || '<p class="subtle">Nenhum cálculo candidato foi identificado.</p>'}</section>`;
+}
+
+function renderV21Blueprint(report) {
+  const blueprint = report.dashboard_blueprint || {};
+  return `<section class="panel"><div class="v21-eyebrow">DASHBOARD BLUEPRINT</div><h2>${escapeHtml(blueprint.title || 'Blueprint')}</h2><p>${escapeHtml(blueprint.objective || 'Sem objetivo disponível.')}</p>
+    <div class="blueprint-grid">${(blueprint.recommended_pages || []).map(page => `<article class="semantic-card"><h3>${escapeHtml(page.name)}</h3><p>${escapeHtml(page.purpose)}</p><h4>Análises</h4>${(page.visuals || []).map(item => `<div class="relationship"><b>${escapeHtml(item.title)}</b><div class="subtle">${escapeHtml(item.visual)} · ${escapeHtml(priorityLabels[item.priority] || item.priority)}</div></div>`).join('') || '<p class="subtle">Sem visuais sugeridos.</p>'}</article>`).join('') || '<p class="subtle">Nenhuma página foi sugerida.</p>'}</div>
+    <h3>KPIs candidatos</h3><div class="filter-row">${(blueprint.kpis || []).map(kpi => `<span class="pill">${escapeHtml(kpi.name)}</span>`).join('') || '<span class="subtle">Nenhum</span>'}</div>
+    <h3>Filtros candidatos</h3><div class="filter-row">${(blueprint.filters || []).map(filter => `<span class="pill">${escapeHtml(filter.column)}</span>`).join('') || '<span class="subtle">Nenhum</span>'}</div>
+    ${(blueprint.warnings || []).map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join('')}</section>`;
+}
+
+function renderV21Security(report) {
+  const security = report.security || {};
+  return `<section class="panel"><h2>Segurança e privacidade</h2><div class="metric-grid">${v21Metric('PROCESSAMENTO', 'Local')}${v21Metric('MACROS EXECUTADAS', 'Não')}${v21Metric('RELAÇÕES EXTERNAS SEGUIDAS', 'Não')}${v21Metric('CONEXÕES ATUALIZADAS', 'Não')}</div>
+    <p>Conteúdo potencialmente ativo detectado: ${security.active_content_detected ? 'Sim, não executado' : 'Não'} · relações externas detectadas: ${Number(security.external_relationship_count || 0)}.</p>
+    <p class="subtle">Nenhum serviço externo é chamado pela descoberta. Os cards usam campos e evidências agregadas; não exibem linhas de registros.</p>
+    ${[...(report.security_warnings || []), ...(report.warnings || [])].map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join('')}</section>`;
+}
+
+function renderV21Diagnosis(report, state) {
+  const tabs = [['summary', 'Resumo'], ['structure', 'Estrutura'], ['columns', 'Colunas'], ['quality', 'Qualidade'], ['keys', 'Chaves'], ['relationships', 'Relacionamentos'], ['anomalies', 'Anomalias'], ['statistics', 'Estatísticas']];
+  if (!report.tables.length) return '<div class="panel">Não há abas para diagnosticar.</div>';
+  const table = report.tables[state.tableIndex] || report.tables[0];
+  return `<div class="panel table-head"><label for="table-select">Tabela/aba</label><select class="table-select" id="table-select">${report.tables.map((item, i) => `<option value="${i}"${i === state.tableIndex ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></div>
+    <nav class="diagnostic-tabs" aria-label="Seções do diagnóstico">${tabs.map(([id, label]) => `<button class="diagnostic-tab${id === state.diagnosticTab ? ' active' : ''}" data-tab="${id}">${label}</button>`).join('')}</nav>
+    <div id="diagnostic-content">${tabContent(state.diagnosticTab, report, table)}</div>`;
+}
+
+function bindV21ViewEvents(report, state, render) {
+  document.querySelectorAll('.diagnostic-tab').forEach(tab => tab.addEventListener('click', () => { state.diagnosticTab = tab.dataset.tab; render(); }));
+  document.querySelector('#table-select')?.addEventListener('change', event => { state.tableIndex = Number(event.target.value); render(); });
+  document.querySelectorAll('[data-priority]').forEach(button => button.addEventListener('click', () => { state.priority = button.dataset.priority; render(); }));
+  document.querySelector('#insight-type-filter')?.addEventListener('change', event => { state.type = event.target.value; render(); });
+  document.querySelector('#toggle-insights')?.addEventListener('click', () => { state.showAllInsights = !state.showAllInsights; render(); });
+  document.querySelector('#toggle-kpis')?.addEventListener('click', () => { state.showAllKpis = !state.showAllKpis; render(); });
 }
 
 function flattenStats(stats, prefix = '') {

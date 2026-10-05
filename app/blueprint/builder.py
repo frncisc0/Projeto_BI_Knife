@@ -5,6 +5,7 @@ from app.models.discovery_models import DashboardBlueprint, InsightsBlock, KpisB
 
 def build_dashboard_blueprint(semantic: SemanticModel, insights: InsightsBlock, kpis: KpisBlock) -> DashboardBlueprint:
     eligible = [item for item in insights.items if item.priority in {"high", "medium"}]
+    eligible.sort(key=lambda item: (-item.relevance_score, item.id))
     high = [item for item in eligible if item.priority == "high"]
     executive = high[:8] + [item for item in eligible if item.priority == "medium"][:4]
     pages = []
@@ -34,7 +35,8 @@ def build_dashboard_blueprint(semantic: SemanticModel, insights: InsightsBlock, 
         title="Dashboard Blueprint — BI Swiss Knife",
         objective="Organizar KPIs e perguntas analíticas sustentadas pelas evidências do AnalysisResult.",
         recommended_pages=pages,
-        kpis=[item for item in kpis.suggested if item.get("priority") in {"high", "medium"}][:8],
+        kpis=sorted((item for item in kpis.suggested if item.get("priority") in {"high", "medium"}),
+                    key=lambda item: (-item.get("relevance_score", 0), item.get("name", "")))[:8],
         insights=[item.id for item in executive], filters=filters,
         dimensions=[{"table": item.table, "name": item.name, "confidence": item.confidence} for item in semantic.dimensions],
         measures=[{"table": item.table, "name": item.name, "format": item.format or "number",

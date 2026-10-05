@@ -45,11 +45,16 @@ def _confidence(column: Any, sampled: bool) -> str:
 
 
 def _field(table: Any, column: Any, role: str, reason: str, *, format: str | None = None) -> SemanticField:
+    statistics = column.statistics.model_dump(mode="python")
+    periods = int(statistics.get("periods", 0) or 0) if role in {"date", "datetime"} else None
+    temporal_support = bool(role in {"date", "datetime"} and periods >= 3
+                            and column.distinct_count >= 6 and column.completeness_pct >= 80)
     return SemanticField(
         table=table.name, name=column.name, role=role,
         confidence=_confidence(column, table.sampled), evidence=_evidence(column),
         reason=reason, format=format, distinct_count=column.distinct_count,
         completeness_pct=column.completeness_pct,
+        temporal_periods=periods, temporal_support=temporal_support,
     )
 
 
@@ -108,7 +113,10 @@ def build_semantic_model(analysis: FileAnalysis) -> SemanticModel:
                 table_measures.append(candidate)
                 measures.append(candidate)
             elif role in {"date", "datetime"}:
-                reason = "Campo identificado como data/hora; usos temporais dependem da cobertura e granularidade disponíveis."
+                stats = column.statistics.model_dump(mode="python")
+                period_count = int(stats.get("periods", 0) or 0)
+                reason = (f"Campo data/hora com {period_count} períodos mensais observados; tendência só é elegível com pelo menos 3 períodos, 6 datas distintas e 80% de preenchimento."
+                          if period_count else "Campo identificado como data/hora; sem evidência de cobertura em períodos suficiente para uma tendência.")
                 candidate = _field(table, column, role, reason, format="date" if role == "date" else "datetime")
                 table_dates.append(candidate)
                 dates.append(candidate)

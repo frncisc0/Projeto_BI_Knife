@@ -19,6 +19,8 @@ class SemanticField(BaseModel):
     format: str | None = None
     distinct_count: int | None = None
     completeness_pct: float | None = None
+    temporal_periods: int | None = None
+    temporal_support: bool = False
 
 
 class SemanticTable(BaseModel):
@@ -59,6 +61,7 @@ class Insight(BaseModel):
     visual: str
     confidence: Confidence
     priority: Literal["low", "medium", "high"]
+    relevance_score: int = 0
     evidence: list[str] = Field(default_factory=list)
     reason: str
     warnings: list[str] = Field(default_factory=list)
