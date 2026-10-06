@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0 — 2026-10-06
+
+- Nova camada Human-Centered BI no mesmo payload, derivada do AnalysisResult e dos blocos de descoberta já calculados.
+- Visão Geral, Descobertas e Análises possíveis apresentam qualidade, achados e avisos em linguagem clara antes dos detalhes técnicos.
+- Dashboard Architect agrupa insights finais em páginas por tema, limita visuais e KPIs, seleciona filtros relevantes e registra interações somente quando há relação de alta confiança.
+- PDF e HTML começam pelo resumo executivo, qualidade, descobertas, pontos de atenção, oportunidades e dashboard; diagnósticos completos continuam disponíveis como camada técnica.
+- Interface V3.0 separa entendimento, análise, dashboard, detalhes técnicos e segurança.
+- Roadmap alinhado a V1 Data Analyzer, V2 Semantic Intelligence, V3 Human-Centered BI, V4 Power BI Assistant e V5 Private BI Intelligence/Automation.
+
 ## 2.2.0 — 2026-10-05
 
 - Scoring composto de relevância com pesos explícitos para aderência semântica, importância da medida, utilidade, qualidade, cardinalidade, sinal de negócio e confiança.

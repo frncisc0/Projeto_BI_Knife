@@ -6,6 +6,7 @@ from app.models.analysis_models import FileAnalysis
 from app.semantic.builder import build_semantic_model
 from app.insights.engine import discover_insights
 from app.blueprint.builder import build_dashboard_blueprint
+from app.services.human_summary_service import build_human_summary, finalize_dashboard_summary
 
 
 def report_payload(analysis: FileAnalysis) -> dict:
@@ -19,16 +20,19 @@ def report_payload(analysis: FileAnalysis) -> dict:
 
 
 def discovery_payload(analysis: FileAnalysis) -> dict:
-    """Build V2 discovery blocks from an already computed AnalysisResult."""
+    """Build semantic, discovery, human-summary and dashboard blocks from one AnalysisResult."""
     semantic = build_semantic_model(analysis)
     insights, kpis = discover_insights(semantic, analysis.quality.score, analysis)
     semantic.calculated_candidates = [item.model_dump(mode="json") for item in kpis.calculation_candidates]
-    blueprint = build_dashboard_blueprint(semantic, insights, kpis)
+    human_summary = build_human_summary(analysis, semantic, insights, kpis)
+    blueprint = build_dashboard_blueprint(semantic, insights, kpis, human_summary)
+    human_summary = finalize_dashboard_summary(human_summary, blueprint)
     return {
         "semantic_model": semantic.model_dump(mode="json"),
         "insights": insights.model_dump(mode="json"),
         "kpis": kpis.model_dump(mode="json"),
         "dashboard_blueprint": blueprint.model_dump(mode="json"),
+        "human_summary": human_summary.model_dump(mode="json"),
     }
 
 

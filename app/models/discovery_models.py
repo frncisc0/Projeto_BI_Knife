@@ -103,3 +103,19 @@ class DashboardBlueprint(BaseModel):
     dimensions: list[dict[str, str]] = Field(default_factory=list)
     measures: list[dict[str, str]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    audience: str = ""
+    design_rationale: list[str] = Field(default_factory=list)
+    interactions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class HumanCenteredSummary(BaseModel):
+    title: str
+    executive_summary: str
+    data_quality_summary: str
+    quality_components: list[dict[str, Any]] = Field(default_factory=list)
+    what_was_found: list[str] = Field(default_factory=list)
+    key_findings: list[dict[str, Any]] = Field(default_factory=list)
+    attention_points: list[dict[str, Any]] = Field(default_factory=list)
+    analysis_opportunities: list[dict[str, Any]] = Field(default_factory=list)
+    dashboard_summary: str
+    technical_details_available: bool = True

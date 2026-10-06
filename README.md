@@ -8,7 +8,7 @@ A V1 responde o que existe no arquivo: abas, dimensões, colunas e tipos inferid
 
 A camada de descoberta semântica produz sugestões explicáveis de análises, KPIs candidatos e um Dashboard Blueprint a partir do AnalysisResult. O blueprint é uma especificação para revisão: não cria dashboards, DAX, consultas Power Query nem modelos automaticamente.
 
-A interface V2.2 apresenta Visão Geral, Diagnóstico, Semântica, Top 12 Análises, KPIs, Dashboard Blueprint e Segurança. O motor pontua aderência semântica, importância da medida, utilidade analítica, qualidade, cardinalidade, sinal de negócio e confiança; também reduz duplicatas equivalentes entre abas. O score permanece heurístico e não é uma métrica de negócio. Tendências exigem evidência de pelo menos três períodos mensais, seis datas distintas e 80% de preenchimento.
+A V3.0 apresenta primeiro um resumo em linguagem simples, os principais achados, pontos de atenção, oportunidades e um dashboard recomendado. Diagnóstico, semântica, scoring, deduplicação, avisos completos, relacionamentos e segurança permanecem acessíveis em Análise técnica. O resumo é construído a partir do mesmo `AnalysisResult` e não relê o arquivo. Toda interpretação é uma possibilidade heurística, não uma conclusão sobre valores de negócio.
 
 ## Requisitos
 

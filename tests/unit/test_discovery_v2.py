@@ -126,16 +126,16 @@ def test_outlier_suggestion_requires_anomaly_evidence_in_analysis_result():
     assert not any(item["type"] == "outlier" for item in report_payload(regular)["insights"]["items"])
 
 
-def test_current_interface_uses_v21_brand_and_exposes_discovery_views():
+def test_current_interface_uses_v3_brand_and_exposes_human_centered_views():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
     index = (root / "frontend" / "index.html").read_text(encoding="utf-8")
     script = (root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
-    assert "BI SWISS KNIFE · V2.2" in index
-    assert "Diagnóstico · Semântica · Insights · Priorização" in index
+    assert "BI SWISS KNIFE · V3.0" in index
+    assert "Resumo · Descobertas · Análises possíveis · Dashboard recomendado" in index
     assert "V0.3.0" not in index and "FERRAMENTA DE DIAGNÓSTICO DE DADOS" not in index
-    for view in ("Visão Geral", "Diagnóstico", "Semântica", "Análises", "KPIs", "Dashboard Blueprint", "Segurança"):
+    for view in ("Visão Geral", "Descobertas", "O que posso analisar?", "Dashboard recomendado", "Análise técnica", "Segurança"):
         assert view in script
 
 
@@ -271,7 +271,7 @@ def test_v22_blueprint_uses_only_prioritized_final_insights_and_limits_executive
     items.append(Insight(id="low", type="ranking", title="Ignorado", business_question="Pergunta", visual="barras",
                          confidence="low", priority="low", relevance_score=99, reason="evidência fraca", evidence=["x"]))
     blueprint = build_dashboard_blueprint(SemanticModel(), InsightsBlock(generated=True, items=items), KpisBlock())
-    executive = next(page for page in blueprint.recommended_pages if page["name"] == "Visão Executiva")
+    executive = next(page for page in blueprint.recommended_pages if page["name"] == "Visão Geral")
     assert len(executive["visuals"]) <= 5
     assert all(item["priority"] in {"high", "medium"} for item in executive["visuals"])
     assert "low" not in blueprint.insights

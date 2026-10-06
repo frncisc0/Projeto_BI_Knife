@@ -362,8 +362,8 @@ function qualityColumnHints(tables) {
     ? `<p class="subtle">Colunas com valores incompatíveis: ${inconsistent.map(escapeHtml).join(', ')}.</p>` : '';
 }
 
-const v21Views = [['overview', 'Visão Geral'], ['diagnosis', 'Diagnóstico'], ['semantics', 'Semântica'],
-  ['insights', 'Análises'], ['kpis', 'KPIs'], ['blueprint', 'Dashboard Blueprint'], ['security', 'Segurança']];
+const v3Views = [['overview', 'Visão Geral'], ['discoveries', 'Descobertas'], ['analyses', 'O que posso analisar?'],
+  ['blueprint', 'Dashboard recomendado'], ['technical', 'Análise técnica'], ['security', 'Segurança']];
 const priorityLabels = { high: 'Alta prioridade', medium: 'Média prioridade', low: 'Baixa prioridade' };
 const insightTypeLabels = { ranking: 'Ranking', comparison: 'Comparação', trend: 'Tendência', kpi: 'KPI',
   distribution: 'Distribuição', outlier: 'Outlier', correlation: 'Correlação', coverage: 'Cobertura',
@@ -373,19 +373,17 @@ function renderFileDetails(report) {
   const target = document.querySelector('#file-details');
   const state = { view: 'overview', diagnosticTab: 'summary', tableIndex: 0,
     priority: 'all', type: 'all', showAllInsights: false, showAllKpis: false };
-  target.innerHTML = `<div class="subtle">${escapeHtml(report.filename)} · status ${escapeHtml(report.status)} · analisado em ${escapeHtml(new Date(report.analyzed_at).toLocaleString('pt-BR'))}</div>
-    <nav class="v21-nav" aria-label="Navegação da análise">${v21Views.map(([id, label]) => `<button class="v21-nav-button${id === state.view ? ' active' : ''}" data-view="${id}">${label}</button>`).join('')}</nav>
+  target.innerHTML = `<nav class="v21-nav" aria-label="Navegação da análise">${v3Views.map(([id, label]) => `<button class="v21-nav-button${id === state.view ? ' active' : ''}" data-view="${id}">${label}</button>`).join('')}</nav>
     <div id="v21-content"></div>`;
   const content = target.querySelector('#v21-content');
   const render = () => {
     target.querySelectorAll('.v21-nav-button').forEach(tab => tab.classList.toggle('active', tab.dataset.view === state.view));
     const renderer = {
-      overview: () => renderV21Overview(report),
-      diagnosis: () => renderV21Diagnosis(report, state),
-      semantics: () => renderV21Semantics(report),
-      insights: () => renderV21Insights(report, state),
-      kpis: () => renderV21Kpis(report, state),
-      blueprint: () => renderV21Blueprint(report),
+      overview: () => renderV3Overview(report),
+      discoveries: () => renderV3Discoveries(report),
+      analyses: () => renderV3Analyses(report),
+      blueprint: () => renderV3Blueprint(report),
+      technical: () => renderV3Technical(report, state),
       security: () => renderV21Security(report),
     }[state.view];
     content.innerHTML = renderer();
@@ -399,23 +397,76 @@ function v21Metric(label, value, note = '') {
   return `<div class="metric"><label>${escapeHtml(label)}</label><strong>${escapeHtml(value)}</strong>${note ? `<span class="subtle">${escapeHtml(note)}</span>` : ''}</div>`;
 }
 
-function renderV21Overview(report) {
-  const semantic = report.semantic_model || {};
-  const insights = report.insights?.items || [];
-  const counts = [
-    ['Dimensões', semantic.dimensions?.length || 0], ['Medidas', semantic.measures?.length || 0],
-    ['Datas', semantic.dates?.length || 0], ['Identificadores', semantic.identifiers?.length || 0],
-    ['Relacionamentos', semantic.relationships?.length ?? report.relationships?.length ?? 0],
-    ['Insights', insights.length], ['KPIs', report.kpis?.suggested?.length || 0],
-  ];
-  const rows = report.tables.reduce((sum, table) => sum + Number(table.rows_analyzed || 0), 0);
-  const columns = report.tables.reduce((sum, table) => sum + Number(table.columns_analyzed || table.columns || 0), 0);
-  return `<section class="panel executive-panel"><div class="v21-eyebrow">BI SWISS KNIFE · V2.2</div><h2>${escapeHtml(report.filename)}</h2>
-    <p class="subtle">${report.tables.length} abas · ${columns.toLocaleString('pt-BR')} colunas · ${rows.toLocaleString('pt-BR')} registros avaliados</p>
-    <div class="metric-grid dashboard-grid">${v21Metric('QUALIDADE GERAL', `${Number(report.quality.score || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}/100`, report.quality.classification)}</div></section>
-    <section class="panel"><h3>O que o Swiss Knife encontrou</h3><div class="metric-grid dashboard-grid">${counts.map(([label, value]) => v21Metric(label.toUpperCase(), Number(value).toLocaleString('pt-BR'))).join('')}</div></section>
-    <section class="panel"><h3>Da estrutura à decisão</h3><p class="journey">Diagnóstico <span>→</span> Semântica <span>→</span> Análises <span>→</span> Priorização <span>→</span> KPIs <span>→</span> Blueprint</p>
-    <p class="subtle">As prioridades são heurísticas explicáveis: o nome de um campo é apenas uma evidência, não uma conclusão de negócio.</p></section>`;
+function renderHumanFinding(item, detailed = false) {
+  const warnings = item.warnings?.length ? `<p class="warning">${item.warnings.map(escapeHtml).join(' · ')}</p>` : '';
+  return `<article class="insight-card human-finding"><div class="insight-badges"><span class="priority-badge">${escapeHtml(item.importance || item.type || 'Descoberta')}</span><span class="pill">${escapeHtml(item.type || 'Análise')}</span></div>
+    <h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.description)}</p>${warnings}
+    ${detailed && item.why ? `<details><summary>Por que isso foi sugerido?</summary><p>${escapeHtml(item.why)}</p></details>` : ''}</article>`;
+}
+
+function renderV3Overview(report) {
+  const summary = report.human_summary || {};
+  const findings = summary.key_findings || [];
+  const attention = summary.attention_points || [];
+  const components = summary.quality_components || [];
+  return `<section class="panel executive-panel"><div class="v21-eyebrow">BI SWISS KNIFE · V3.0</div><h2>${escapeHtml(summary.title || 'Resumo da análise')}</h2>
+    <p class="subtle">Arquivo analisado: ${escapeHtml(report.filename)}</p><p class="business-question">${escapeHtml(summary.executive_summary || 'Resumo indisponível.')}</p></section>
+    <section class="panel"><div class="table-head"><div><h2>Como estão os dados?</h2><p>${escapeHtml(summary.data_quality_summary || 'A qualidade foi avaliada pelas verificações disponíveis.')}</p></div>
+    ${v21Metric('QUALIDADE GERAL', `${Number(report.quality?.score || 0).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1})}/100`, report.quality?.classification || '')}</div>
+    <div class="quality-component-grid">${components.map(component => `<div><b>${escapeHtml(component.name)}</b><strong>${Number(component.value || 0).toLocaleString('pt-BR', {maximumFractionDigits: 1})}%</strong><small>${escapeHtml(component.description)}</small></div>`).join('')}</div></section>
+    <section class="panel"><h2>O que encontramos</h2><ul class="human-summary-list">${(summary.what_was_found || []).map(text => `<li>${escapeHtml(text)}</li>`).join('') || '<li>Não foi possível resumir os campos identificados.</li>'}</ul></section>
+    <section class="panel"><div class="table-head"><div><h2>Principais descobertas</h2><p>Possibilidades de análise sustentadas pelos campos encontrados.</p></div><button class="secondary-button" data-go-view="discoveries">Ver descobertas</button></div>
+    <div class="insight-grid">${findings.slice(0, 3).map(item => renderHumanFinding(item)).join('') || '<p class="subtle">Não há descobertas prioritárias com evidência suficiente.</p>'}</div></section>
+    <section class="panel"><h2>Pontos de atenção</h2>${attention.slice(0, 3).map(point => `<div class="human-attention severity-${escapeHtml(point.severity)}"><b>${escapeHtml({critical:'Problema crítico',attention:'Atenção',information:'Informação'}[point.severity] || 'Informação')}</b><p>${escapeHtml(point.message)}</p></div>`).join('') || '<p class="subtle">Nenhum ponto de atenção foi registrado.</p>'}</section>
+    <section class="panel"><h2>Dashboard recomendado</h2><p>${escapeHtml(summary.dashboard_summary || 'Ainda não há uma recomendação disponível.')}</p><button class="secondary-button" data-go-view="blueprint">Ver proposta de dashboard</button></section>`;
+}
+
+function renderV3Discoveries(report) {
+  const summary = report.human_summary || {};
+  const findings = summary.key_findings || [];
+  const points = summary.attention_points || [];
+  return `<section class="panel"><h2>Principais descobertas</h2><p>Estas são possibilidades indicadas pelos metadados analisados; não representam conclusões sobre resultados específicos.</p>
+    <div class="insight-grid">${findings.map(item => renderHumanFinding(item, true)).join('') || '<p class="subtle">Não foram encontradas análises prioritárias com evidência suficiente.</p>'}</div></section>
+    <section class="panel"><h2>Pontos de atenção</h2>${points.map(point => `<div class="human-attention severity-${escapeHtml(point.severity)}"><div class="insight-badges"><b>${escapeHtml({critical:'Problema crítico',attention:'Atenção',information:'Informação'}[point.severity] || 'Informação')}</b><span class="pill">${escapeHtml(point.source || 'análise')}</span></div><p>${escapeHtml(point.message)}</p></div>`).join('') || '<p class="subtle">Nenhum ponto de atenção foi registrado.</p>'}</section>`;
+}
+
+function renderV3Analyses(report) {
+  const opportunities = report.human_summary?.analysis_opportunities || [];
+  const insightsById = Object.fromEntries((report.insights?.items || []).map(item => [item.id, item]));
+  return `<section class="panel"><h2>O que posso analisar com esses dados?</h2><p>As categorias abaixo só aparecem quando existem sugestões com evidências correspondentes.</p>
+    ${opportunities.map(group => `<section class="opportunity-group"><h3>${escapeHtml(group.category)}</h3><div class="insight-grid">${(group.suggestions || []).map(suggestion => {
+      const source = insightsById[suggestion.insight_id];
+      return `<article class="insight-card human-finding"><h3>${escapeHtml(suggestion.question)}</h3><p>${escapeHtml(suggestion.description)}</p>${source ? `<details><summary>Por que sugerimos isso?</summary><p>${escapeHtml(suggestion.why)}</p>${(source.warnings || []).map(warning => `<p class="warning">${escapeHtml(warning)}</p>`).join('')}</details>` : ''}</article>`;
+    }).join('')}</div></section>`).join('') || '<p class="subtle">Não há oportunidades com evidência suficiente para recomendar análises.</p>'}</section>`;
+}
+
+function renderV3Blueprint(report) {
+  const blueprint = report.dashboard_blueprint || {};
+  const findingsById = Object.fromEntries((report.human_summary?.key_findings || []).map(item => [item.insight_id, item]));
+  const calculations = report.kpis?.calculation_candidates || [];
+  const kpis = blueprint.kpis || [];
+  return `<section class="panel executive-panel"><div class="v21-eyebrow">DASHBOARD ARCHITECT</div><h2>${escapeHtml(blueprint.title || 'Dashboard recomendado')}</h2>
+    <p class="business-question">${escapeHtml(blueprint.objective || 'Organizar as análises sustentadas pelos dados.')}</p><p>${escapeHtml(blueprint.audience || '')}</p></section>
+    <section class="panel"><h2>Páginas sugeridas</h2><div class="blueprint-grid">${(blueprint.recommended_pages || []).map(page => `<article class="semantic-card"><h3>${escapeHtml(page.name)}</h3><p>${escapeHtml(page.purpose)}</p><p class="subtle">${escapeHtml(page.rationale || '')}</p>
+      ${page.kpis?.length ? `<h4>Indicadores</h4><ul>${page.kpis.map(kpi => `<li><b>${escapeHtml(kpi.name)}</b> — ${escapeHtml(kpi.measure?.column || kpi.calculation_candidate?.numerator || 'medida candidata')}</li>`).join('')}</ul>` : ''}
+      <h4>Análises recomendadas</h4>${(page.visuals || []).map(item => `<div class="relationship"><b>${escapeHtml(item.business_question || item.title)}</b><p class="subtle">${escapeHtml(item.visual)} · ${escapeHtml(findingsById[item.id]?.description || item.type)}</p></div>`).join('') || '<p class="subtle">Sem análises priorizadas para esta página.</p>'}</article>`).join('') || '<p class="subtle">Ainda não há páginas sustentadas por evidências suficientes.</p>'}</div></section>
+    <section class="panel"><h2>KPIs principais</h2><div class="insight-grid">${kpis.map(kpi => {
+      const calculation = kpi.calculation_candidate;
+      const description = calculation ? `${calculation.numerator} dividido por ${calculation.denominator}. Valide a regra de negócio antes de calcular.` : `${kpi.name} foi identificado como medida candidata nos dados.`;
+      return `<article class="kpi-card"><h3>${escapeHtml(kpi.name)}</h3><p>${escapeHtml(description)}</p><p class="subtle">${escapeHtml(kpi.table || '')}</p></article>`;
+    }).join('') || '<p class="subtle">Não há KPIs com prioridade suficiente para esta proposta.</p>'}</div>
+    ${calculations.length ? `<details><summary>Cálculos candidatos (não validados)</summary>${calculations.map(item => `<p><b>${escapeHtml(item.name)}</b>: ${escapeHtml(item.numerator)} ÷ ${escapeHtml(item.denominator)}. ${escapeHtml(item.reason)} Valide a regra de negócio.</p>`).join('')}</details>` : ''}</section>
+    <section class="panel"><h2>Filtros e interações</h2><h3>Filtros sugeridos</h3><div class="filter-row">${(blueprint.filters || []).map(item => `<span class="pill">${escapeHtml(item.column)}</span>`).join('') || '<span class="subtle">Nenhum filtro foi sugerido.</span>'}</div>
+    ${blueprint.interactions?.length ? `<h3>Filtros cruzados possíveis</h3>${blueprint.interactions.map(item => `<p>${escapeHtml(item.source)} → ${escapeHtml(item.target)} · ${escapeHtml(item.reason)}</p>`).join('')}` : '<p class="subtle">Não há relações suficientemente confiáveis para sugerir filtros cruzados ou hierarquias.</p>'}
+    ${(blueprint.design_rationale || []).map(item => `<p class="subtle">${escapeHtml(item)}</p>`).join('')}${(blueprint.warnings || []).map(item => `<p class="warning">${escapeHtml(item)}</p>`).join('')}</section>`;
+}
+
+function renderV3Technical(report, state) {
+  return `<section class="panel"><h2>Análise técnica</h2><p>Os detalhes semânticos, critérios de prioridade e diagnósticos completos continuam disponíveis aqui.</p>
+    <details><summary>Modelo semântico e relacionamentos</summary>${renderV21Semantics(report)}</details>
+    <details><summary>Diagnóstico completo por aba</summary>${renderV21Diagnosis(report, state)}</details>
+    <details><summary>Insights, evidências e avisos técnicos</summary>${renderV21Insights(report, {...state, showAllInsights: true})}</details>
+    <details><summary>KPIs e cálculos candidatos</summary>${renderV21Kpis(report, {...state, showAllKpis: true})}</details></section>`;
 }
 
 function renderSemanticFields(fields, emptyText) {
@@ -505,6 +556,10 @@ function renderV21Diagnosis(report, state) {
 }
 
 function bindV21ViewEvents(report, state, render) {
+  document.querySelectorAll('[data-go-view]').forEach(button => button.addEventListener('click', () => {
+    state.view = button.dataset.goView;
+    render();
+  }));
   document.querySelectorAll('.diagnostic-tab').forEach(tab => tab.addEventListener('click', () => { state.diagnosticTab = tab.dataset.tab; render(); }));
   document.querySelector('#table-select')?.addEventListener('change', event => { state.tableIndex = Number(event.target.value); render(); });
   document.querySelectorAll('[data-priority]').forEach(button => button.addEventListener('click', () => { state.priority = button.dataset.priority; render(); }));

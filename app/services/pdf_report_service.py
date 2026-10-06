@@ -82,6 +82,72 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
                       Paragraph(f"Data da análise: {_safe(report.get('analyzed_at'))} &nbsp; | &nbsp; "
                                 f"Tempo: {_safe(_duration(report.get('processing_time_ms', 0)))} &nbsp; | &nbsp; "
                                 f"Status: {_safe(_status(report.get('status')))}", styles["SmallText"])])
+    severity_labels = {"critical": "Problema crítico", "attention": "Atenção", "information": "Informação"}
+    type_labels = {"ranking": "Ranking", "comparison": "Comparação", "trend": "Evolução",
+                   "kpi": "Indicador", "coverage": "Indicador derivado", "distribution": "Distribuição",
+                   "outlier": "Ponto fora do padrão", "segmentation": "Segmentação", "detail_table": "Detalhamento"}
+    for filename, report in reports:
+        human = report.get("human_summary") or {}
+        quality = report.get("quality", {})
+        story.append(Paragraph("Resumo Executivo", styles["Section"]))
+        story.append(Paragraph(_safe(human.get("executive_summary", f"Análise do arquivo {filename}.")), styles["BodyText"]))
+        story.append(Spacer(1, 3 * mm))
+        story.append(Paragraph("Qualidade dos dados", styles["Heading3"]))
+        story.append(Paragraph(_safe(human.get("data_quality_summary", quality.get("classification", "Qualidade não informada."))), styles["BodyText"]))
+        components = human.get("quality_components", [])
+        if components:
+            component_rows = [["Aspecto", "Resultado", "O que significa"]]
+            component_rows.extend([[item.get("name", "-"), f"{item.get('value', '-') }%", item.get("description", "-")]
+                                   for item in components])
+            story.append(_simple_table(component_rows, LongTable, TableStyle, Paragraph, styles,
+                                       [37 * mm, 26 * mm, 100 * mm], repeat_rows=1))
+        else:
+            story.append(Paragraph(f"Qualidade geral: {_safe(quality.get('score', '-'))}/100 · "
+                                   f"{_safe(quality.get('classification', '-'))}.", styles["SmallText"]))
+
+        story.append(Paragraph("Principais descobertas", styles["Heading3"]))
+        findings = human.get("key_findings", [])
+        if findings:
+            for item in findings[:6]:
+                story.append(KeepTogether([Paragraph(
+                    f"<b>{_safe(item.get('title'))}</b> · {_safe(item.get('importance'))} · {_safe(item.get('type'))}<br/>"
+                    f"{_safe(item.get('description'))}<br/><font color='#617168'>Por que: {_safe(item.get('why'))}</font>",
+                    styles["AlertText"]), Spacer(1, 2 * mm)]))
+        else:
+            story.append(Paragraph("Não há análises prioritárias com evidência suficiente para destacar.", styles["SmallText"]))
+
+        story.append(Paragraph("Pontos de atenção", styles["Heading3"]))
+        attention = human.get("attention_points", [])
+        if attention:
+            for point in attention[:12]:
+                story.append(Paragraph(f"<b>{_safe(severity_labels.get(point.get('severity'), 'Informação'))}</b> · "
+                                       f"{_safe(point.get('message'))}", styles["AlertText"]))
+        else:
+            story.append(Paragraph("Nenhum ponto de atenção foi registrado.", styles["SmallText"]))
+
+        story.append(Paragraph("O que pode ser analisado", styles["Heading3"]))
+        opportunities = human.get("analysis_opportunities", [])
+        if opportunities:
+            for group in opportunities:
+                questions = group.get("questions", [])[:6]
+                story.append(Paragraph(f"<b>{_safe(group.get('category'))}</b>: "
+                                       f"{_safe(' · '.join(str(question) for question in questions))}", styles["SmallText"]))
+        else:
+            story.append(Paragraph("Não foram encontradas oportunidades com evidência suficiente.", styles["SmallText"]))
+
+        story.append(Paragraph("Dashboard recomendado", styles["Heading3"]))
+        blueprint = report.get("dashboard_blueprint") or {}
+        story.append(Paragraph(_safe(human.get("dashboard_summary", blueprint.get("objective", "Não há recomendação de dashboard."))), styles["BodyText"]))
+        if blueprint.get("audience"):
+            story.append(Paragraph(f"Público: {_safe(blueprint.get('audience'))}", styles["SmallText"]))
+        for page in blueprint.get("recommended_pages", [])[:5]:
+            story.append(Paragraph(f"<b>{_safe(page.get('name'))}</b> — {_safe(page.get('purpose'))}", styles["SmallText"]))
+        kpi_names = [item.get("name", "") for item in blueprint.get("kpis", [])[:6]]
+        if kpi_names:
+            story.append(Paragraph(f"Indicadores priorizados: {_safe(', '.join(kpi_names))}", styles["SmallText"]))
+    story.append(PageBreak())
+    story.append(Paragraph("Detalhes técnicos", styles["Section"]))
+    story.append(Paragraph("A partir desta seção, o relatório apresenta estrutura, métricas, evidências e informações de segurança para revisão técnica.", styles["SmallText"]))
     story.extend([Paragraph("1. Resumo", styles["Section"]),
                   _metric_table([("Abas", total_sheets), ("Registros avaliados", total_rows),
                                  ("Colunas", total_columns), ("Tipos de pontos de atenção", len(all_alerts))], Table, TableStyle, colors, pale, styles),

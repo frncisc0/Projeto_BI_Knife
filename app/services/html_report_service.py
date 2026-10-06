@@ -148,6 +148,46 @@ def _table_html(table: dict[str, Any], index: int) -> str:
       </div></details>'''
 
 
+def _human_summary_html(report: dict[str, Any], index: int) -> str:
+    human = report.get("human_summary") or {}
+    if not human:
+        return ""
+    components = "".join(
+        f'<div class="stats"><div><small>{_text(item.get("name"))}</small>'
+        f'<b>{_text(item.get("value"))}%</b><span class="muted">{_text(item.get("description"))}</span></div></div>'
+        for item in human.get("quality_components", [])
+    )
+    found = "".join(f"<li>{_text(item)}</li>" for item in human.get("what_was_found", []))
+    findings = "".join(
+        f'<article class="insight-card"><span class="badge">{_text(item.get("importance"))} · {_text(item.get("type"))}</span>'
+        f'<h4>{_text(item.get("title"))}</h4><p>{_text(item.get("description"))}</p>'
+        f'<details><summary>Por que sugerimos isso?</summary><p>{_text(item.get("why"))}</p></details></article>'
+        for item in human.get("key_findings", [])
+    ) or '<p class="muted">Não há descobertas prioritárias com evidência suficiente.</p>'
+    severity = {"critical": "critical", "attention": "attention", "information": "information"}
+    attention = "".join(
+        f'<article class="alert {severity.get(item.get("severity"), "information")}"><div>'
+        f'<strong>{_text(item.get("message"))}</strong></div></article>'
+        for item in human.get("attention_points", [])
+    ) or '<p class="muted">Nenhum ponto de atenção foi registrado.</p>'
+    opportunities = "".join(
+        f'<section><h4>{_text(group.get("category"))}</h4><ul>'
+        + "".join(f"<li>{_text(question)}</li>" for question in group.get("questions", [])) + "</ul></section>"
+        for group in human.get("analysis_opportunities", [])
+    ) or '<p class="muted">Não há oportunidades com evidência suficiente.</p>'
+    blueprint = report.get("dashboard_blueprint") or {}
+    pages = "".join(f'<li><b>{_text(page.get("name"))}</b> — {_text(page.get("purpose"))}</li>'
+                     for page in blueprint.get("recommended_pages", []))
+    return (f'<section id="human-summary-{index}"><h3>{_text(human.get("title", "Resumo executivo"))}</h3>'
+            f'<p>{_text(human.get("executive_summary"))}</p><h4>Como estão os dados?</h4>'
+            f'<p>{_text(human.get("data_quality_summary"))}</p>{components}'
+            f'<h4>O que encontramos</h4><ul>{found}</ul><h4 id="discoveries-{index}">Principais descobertas</h4>'
+            f'<div class="insight-grid">{findings}</div><h4>Pontos de atenção</h4>{attention}'
+            f'<h4 id="opportunities-{index}">O que posso analisar?</h4>{opportunities}'
+            f'<h4 id="dashboard-{index}">Dashboard recomendado</h4><p>{_text(human.get("dashboard_summary"))}</p>'
+            f'<ul>{pages}</ul></section>')
+
+
 def render_html_report(batch: dict[str, Any]) -> str:
     """Render a self-contained, offline report without re-reading source files."""
     reports = _reports(batch)
@@ -162,7 +202,8 @@ def render_html_report(batch: dict[str, Any]) -> str:
     report_sections = "".join(f'<section class="report-file"><h2>{_text(filename)}</h2><p class="muted">'
                                f'{_text(report.get("file_type", "arquivo")).upper()} · {_text(_status(report.get("status")))} · '
                                f'{_text(_duration(report.get("processing_time_ms", 0)))} · analisado em {_text(report.get("analyzed_at"))}</p>'
-                               f'<h3>Qualidade geral</h3><div class="score"><strong>{_text(report.get("quality", {}).get("score"))}/100</strong>'
+                               f'{_human_summary_html(report, report_index)}'
+                               f'<h3 id="quality">Detalhes da qualidade</h3><div class="score"><strong>{_text(report.get("quality", {}).get("score"))}/100</strong>'
                                f'<span>{_text(report.get("quality", {}).get("classification"))}</span></div>'
                                f'<div class="dimensions">{_quality_bars(report.get("quality", {}))}</div>'
                                f'<h3>Pontos de atenção</h3>{"".join(_alert_html(alert) for table in report.get("tables", []) for alert in _alerts(table.get("quality", {}))) or "<p class=\"muted\">Nenhum alerta.</p>"}'
@@ -178,7 +219,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
                                f'{_number(report.get("settings", {}).get("max_rows_to_analyze"))} linhas, '
                                f'{_number(report.get("settings", {}).get("max_columns_to_analyze"))} colunas e '
                                f'{_number(report.get("settings", {}).get("max_cells_to_analyze"))} células por tabela.</p></section>'
-                               for filename, report in reports)
+                               for report_index, (filename, report) in enumerate(reports))
     failed_rows = "".join(f'<tr><td>{_text(item.get("filename"))}</td><td>{_text(item.get("error"))}</td></tr>'
                           for item in batch.get("results", []) if not item.get("analysis"))
     return f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -202,7 +243,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
       @media(max-width:650px){{header{{padding:26px 18px}}header h1{{font-size:25px}}main{{padding:0 12px 30px}}section{{padding:16px}}}}
       @media print{{body{{background:white;font-size:10pt}}header{{padding:18px 0;background:white;color:var(--ink);border-bottom:2px solid var(--green)}}nav{{display:none}}main{{max-width:none;margin:0;padding:0}}section,.panel,.sheet{{break-inside:avoid;box-shadow:none;margin:8px 0;padding:12px}}.sheet{{break-inside:auto}}.sheet:not([open])>.sheet-body{{display:block}}a{{color:inherit}}}}
       </style></head><body><header><strong>BI SWISS KNIFE</strong><h1>Diagnóstico de Dados</h1><p>Relatório local · sem prévia de linhas ou rótulos de categorias</p></header><main>
-      <nav aria-label="Navegação do relatório"><a href="#summary">Resumo</a><a href="#quality">Qualidade</a><a href="#sheets">Abas e estrutura</a><a href="#relationships">Relações</a><a href="#insights">Análises e blueprint</a><a href="#security">Segurança</a><a href="#technical">Técnico</a></nav>
+      <nav aria-label="Navegação do relatório"><a href="#summary">Resumo</a><a href="#human-summary-0">Entendimento</a><a href="#discoveries-0">Descobertas</a><a href="#opportunities-0">Análises possíveis</a><a href="#dashboard-0">Dashboard</a><a href="#quality">Qualidade técnica</a><a href="#sheets">Abas e estrutura</a><a href="#relationships">Relações</a><a href="#insights">Técnico</a><a href="#security">Segurança</a></nav>
       <section id="summary"><h2>Resumo da seleção</h2><div class="cards"><div><small>Arquivos</small><strong>{_number(batch.get("file_count", len(batch.get("results", []))))}</strong></div>
         <div><small>Abas</small><strong>{_number(total_sheets)}</strong></div><div><small>Registros avaliados</small><strong>{_number(total_rows)}</strong></div>
         <div><small>Colunas</small><strong>{_number(total_columns)}</strong></div><div><small>Tipos de alertas</small><strong>{_number(len(all_alerts))}</strong></div></div>

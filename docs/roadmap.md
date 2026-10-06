@@ -1,14 +1,9 @@
 # Roadmap
 
-- **V1 — Importação e diagnóstico básico:** base local de leitura, qualidade e relatórios.
-- **V1.1 — Diagnóstico estruturado:** profiling local, qualidade, chaves, relações, anomalias explicáveis e relatório privado.
-- **V2 — Semantic Layer, Insight Discovery e Dashboard Blueprint:** sugestões locais, determinísticas, explicáveis e derivadas do AnalysisResult; sem criação automática de dashboards.
-- **V3 — Analytics Discovery avançado:** ampliar combinações e validações de regras de negócio.
-- **V4 — Dashboard Blueprint avançado:** composição e organização refinada de páginas e visuais.
-- **V5 — Power BI Assistant:** assistência de modelagem sem automação destrutiva.
-- **V6 — DAX Generator:** somente com escopo de validação explícita.
-- **V7 — Power Query Generator:** somente com revisão e preservação da fonte.
-- **V8 — IA local/privada:** avaliar apenas com políticas explícitas para metadados e agregações permitidas.
-- **V9 — Automação avançada de BI.**
+- **V1 — Data Analyzer:** importação local, diagnóstico, qualidade e relatórios.
+- **V2 — Semantic Intelligence:** modelo semântico, insights, KPIs, scoring, deduplicação e priorização.
+- **V3 — Human-Centered BI + Dashboard Architect:** explicações em linguagem clara, descobertas evidenciadas e proposta coerente de páginas, KPIs, visuais e filtros.
+- **V4 — Power BI Assistant:** assistência à modelagem e preparação de análises, sem automação destrutiva.
+- **V5 — Private BI Intelligence / Automation:** avaliar automação privada somente com limites, políticas e revisão explícitos.
 
-As etapas futuras são propostas, não compromissos de escopo; cada uma dependerá de validação do produto.
+As etapas futuras são propostas, não compromissos de escopo; cada uma dependerá de validação do produto. Recursos de IA externa, envio de arquivos, publicação automática, geração de PBIX e execução de macros/código permanecem fora do escopo.
