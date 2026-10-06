@@ -82,6 +82,10 @@ class InsightsBlock(BaseModel):
     generated: bool
     items: list[Insight] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    candidate_count: int = 0
+    deduplicated_count: int = 0
+    duplicates_removed: int = 0
+    top_limit: int = 12
 
 
 class KpisBlock(BaseModel):

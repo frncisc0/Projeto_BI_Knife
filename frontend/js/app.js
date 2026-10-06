@@ -410,7 +410,7 @@ function renderV21Overview(report) {
   ];
   const rows = report.tables.reduce((sum, table) => sum + Number(table.rows_analyzed || 0), 0);
   const columns = report.tables.reduce((sum, table) => sum + Number(table.columns_analyzed || table.columns || 0), 0);
-  return `<section class="panel executive-panel"><div class="v21-eyebrow">BI SWISS KNIFE · V2.1</div><h2>${escapeHtml(report.filename)}</h2>
+  return `<section class="panel executive-panel"><div class="v21-eyebrow">BI SWISS KNIFE · V2.2</div><h2>${escapeHtml(report.filename)}</h2>
     <p class="subtle">${report.tables.length} abas · ${columns.toLocaleString('pt-BR')} colunas · ${rows.toLocaleString('pt-BR')} registros avaliados</p>
     <div class="metric-grid dashboard-grid">${v21Metric('QUALIDADE GERAL', `${Number(report.quality.score || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}/100`, report.quality.classification)}</div></section>
     <section class="panel"><h3>O que o Swiss Knife encontrou</h3><div class="metric-grid dashboard-grid">${counts.map(([label, value]) => v21Metric(label.toUpperCase(), Number(value).toLocaleString('pt-BR'))).join('')}</div></section>
@@ -459,20 +459,22 @@ function renderV21Insights(report, state) {
   const items = report.insights?.items || [];
   const filtered = items.filter(item => (state.priority === 'all' || item.priority === state.priority)
     && (state.type === 'all' || item.type === state.type));
-  const visible = state.showAllInsights ? filtered : filtered.slice(0, 5);
+  const topLimit = Number(report.insights?.top_limit || 12);
+  const visible = state.showAllInsights ? filtered : filtered.slice(0, topLimit);
   const typeOptions = Object.keys(insightTypeLabels).map(type => `<option value="${escapeHtml(type)}"${state.type === type ? ' selected' : ''}>${escapeHtml(insightTypeLabels[type])}</option>`).join('');
-  return `<section class="panel"><div class="table-head"><div><h2>Principais análises</h2><p class="subtle">Ordenadas pela relevância estimada. O score numérico não é uma métrica empresarial.</p></div><label>Tipo <select id="insight-type-filter" class="table-select"><option value="all">Todos os tipos</option>${typeOptions}</select></label></div>
+  return `<section class="panel"><div class="table-head"><div><h2>Top ${topLimit} análises</h2><p class="subtle">${Number(report.insights?.duplicates_removed || 0)} duplicata(s) semântica(s) removida(s) · ordenadas pela relevância estimada. O score não é uma métrica empresarial.</p></div><label>Tipo <select id="insight-type-filter" class="table-select"><option value="all">Todos os tipos</option>${typeOptions}</select></label></div>
     <div class="filter-row">${[['all','Todas'],['high','Alta'],['medium','Média'],['low','Baixa']].map(([key,label]) => `<button class="filter-button${state.priority === key ? ' active' : ''}" data-priority="${key}">${label}</button>`).join('')}</div>
     <p class="subtle">${filtered.length} análise(s) compatível(is) com os filtros.</p><div class="insight-grid">${visible.map(renderInsightCard).join('') || '<p class="subtle">Nenhuma análise atende a estes filtros.</p>'}</div>
-    ${filtered.length > 5 ? `<button id="toggle-insights" class="secondary-button">${state.showAllInsights ? 'Mostrar principais' : 'Ver todas as análises'}</button>` : ''}</section>`;
+    ${filtered.length > topLimit ? `<button id="toggle-insights" class="secondary-button">${state.showAllInsights ? 'Mostrar Top 12' : 'Ver todas as análises'}</button>` : ''}</section>`;
 }
 
 function renderV21Kpis(report, state) {
   const kpis = report.kpis?.suggested || [];
-  const visible = state.showAllKpis ? kpis : kpis.slice(0, 8);
+  const primaryKpis = kpis.filter(kpi => kpi.priority === 'high' || kpi.priority === 'medium');
+  const visible = state.showAllKpis ? kpis : primaryKpis.slice(0, 8);
   const calculations = report.kpis?.calculation_candidates || [];
-  return `<section class="panel"><h2>KPIs sugeridos</h2><p class="subtle">Ordenados por relevância; a prioridade não valida a regra de negócio.</p><div class="insight-grid">${visible.map(kpi => `<article class="kpi-card"><span class="priority-badge priority-${escapeHtml(kpi.priority)}">${escapeHtml(priorityLabels[kpi.priority] || kpi.priority)}</span><h3>${escapeHtml(kpi.name)}</h3><p>${escapeHtml(kpi.table)} · ${escapeHtml(kpi.measure?.column || kpi.calculation_candidate?.numerator || 'cálculo candidato')}</p><p>Confiança: ${escapeHtml(kpi.confidence)}</p><details><summary>Justificativa</summary><p>${escapeHtml(kpi.reason)}</p></details></article>`).join('') || '<p class="subtle">Nenhum KPI elegível foi sugerido.</p>'}</div>
-    ${kpis.length > 8 ? `<button id="toggle-kpis" class="secondary-button">${state.showAllKpis ? 'Mostrar principais' : 'Ver todos os KPIs'}</button>` : ''}</section>
+  return `<section class="panel"><h2>KPIs principais</h2><p class="subtle">Priorizados pela relevância; a prioridade não valida a regra de negócio.</p><div class="insight-grid">${visible.map(kpi => `<article class="kpi-card"><span class="priority-badge priority-${escapeHtml(kpi.priority)}">${escapeHtml(priorityLabels[kpi.priority] || kpi.priority)}</span><h3>${escapeHtml(kpi.name)}</h3><p>${escapeHtml(kpi.table)} · ${escapeHtml(kpi.measure?.column || kpi.calculation_candidate?.numerator || 'cálculo candidato')}</p><p>Confiança: ${escapeHtml(kpi.confidence)}</p><details><summary>Justificativa</summary><p>${escapeHtml(kpi.reason)}</p></details></article>`).join('') || '<p class="subtle">Nenhum KPI de prioridade alta ou média; confira as sugestões complementares.</p>'}</div>
+    ${kpis.length > 8 || kpis.some(kpi => kpi.priority === 'low') ? `<button id="toggle-kpis" class="secondary-button">${state.showAllKpis ? 'Mostrar principais' : 'Ver todas as sugestões de KPI'}</button>` : ''}</section>
     <section class="panel"><h3>Cálculos que podem ser derivados</h3><p class="subtle">Candidatos não validados; nenhuma fórmula ou DAX foi executado.</p>${calculations.map(calc => `<article class="calculation-card"><div><span class="pill">CÁLCULO CANDIDATO</span> · confiança ${escapeHtml(calc.confidence)}</div><h3>${escapeHtml(calc.name)}</h3><div class="fraction"><span>${escapeHtml(calc.numerator)}</span><i></i><span>${escapeHtml(calc.denominator)}</span></div><p>${escapeHtml(calc.reason)}</p><p class="subtle">Valide a fórmula, os filtros e a regra de negócio antes de calcular.</p></article>`).join('') || '<p class="subtle">Nenhum cálculo candidato foi identificado.</p>'}</section>`;
 }
 

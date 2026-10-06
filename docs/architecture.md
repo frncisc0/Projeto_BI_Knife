@@ -25,9 +25,9 @@ JSON → HTML / PDF offline
 - **Serviços:** coordenam a leitura uma única vez, perfil, serialização e geração dos relatórios.
 - **Analisadores:** inferem tipos, métricas de qualidade e estatísticas sem rótulos ou amostras de células no resultado.
 - **Semantic Layer:** organiza os papéis já presentes no `AnalysisResult`; ignora campos marcados como sensíveis e não relê arquivos nem DataFrames.
-- **Insight Discovery:** cruza campos da mesma aba com evidência suficiente, aplica confiança/prioridade e explica cada sugestão; não chama serviços externos nem calcula valores derivados.
-- **Dashboard Blueprint:** organiza sugestões elegíveis em páginas, KPIs candidatos e filtros para revisão; não gera dashboard final.
-- **Interface V2.1:** consome os blocos já devolvidos pela API, apresenta prioridades e filtros sem recalcular semântica no navegador. O relevance score usa pesos documentados em `app/insights/engine.py` e permanece oculto como número na experiência do usuário.
+- **Insight Discovery:** cruza campos da mesma aba, avalia score composto, deduplica análises semanticamente equivalentes entre abas, prioriza até 60 sugestões finais e explica cada sugestão; não chama serviços externos nem calcula valores derivados.
+- **Dashboard Blueprint:** utiliza somente os insights finais de prioridade média/alta, limita a visão executiva a cinco visuais e seleciona KPIs/filtros relevantes para revisão; não gera dashboard final.
+- **Interface V2.2:** consome os blocos já devolvidos pela API, apresenta as 12 principais análises, prioridades e filtros sem recalcular semântica no navegador. Os pesos do relevance score estão documentados em `app/insights/engine.py` e o número permanece oculto como métrica de negócio.
 - **Schemas:** definem os contratos independentes dos DataFrames usados internamente.
 - **Segurança/configuração:** concentram validação de arquivo, limites e padrões.
 

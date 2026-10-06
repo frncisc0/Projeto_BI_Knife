@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0 — 2026-10-05
+
+- Scoring composto de relevância com pesos explícitos para aderência semântica, importância da medida, utilidade, qualidade, cardinalidade, sinal de negócio e confiança.
+- Dedupe semântico de análises e KPIs equivalentes entre abas, mantendo a sugestão de maior qualidade.
+- Prioridade HIGH/MEDIUM/LOW considera confiança, qualidade e força das evidências; KPIs auxiliares fracos deixam de ocupar a seleção principal.
+- Visão de insights limitada a Top 12 com opção para consultar demais resultados deduplicados; Blueprint executivo limitado aos cinco melhores.
+- Perguntas de negócio refinadas e justificativas ampliadas com evidências semânticas e de preenchimento.
+- Testes para scoring, deduplicação, prioridade e seleção do Blueprint.
+
 ## 2.1.0 — 2026-10-04
 
 - Interface com navegação para visão geral, diagnóstico, semântica, análises, KPIs, blueprint e segurança.

@@ -7,7 +7,7 @@ class Settings:
     """Centralized settings with conservative local defaults."""
 
     app_name = "BI Swiss Knife"
-    version = "2.1.0"
+    version = "2.2.0"
     max_file_size_mb = int(os.getenv("BI_MAX_FILE_SIZE_MB", "100"))
     max_xlsx_uncompressed_mb = int(os.getenv("BI_MAX_XLSX_UNCOMPRESSED_MB", "500"))
     max_files_per_batch = int(os.getenv("BI_MAX_FILES_PER_BATCH", "50"))

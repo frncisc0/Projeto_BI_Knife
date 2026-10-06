@@ -104,7 +104,7 @@ def test_business_questions_use_natural_templates_for_common_dimensions():
     from app.insights.engine import _business_question
 
     assert _business_question("Contratada", "Risco Descoberto")[2] == "Quais contratadas apresentam maior risco descoberto?"
-    assert _business_question("Empresa Enel", "Risco Total")[2] == "Como o risco total está distribuído entre as empresas Enel?"
+    assert _business_question("Empresa Enel", "Risco Total")[2] == "Quais empresas Enel concentram maior risco total?"
     assert _business_question("Diretoria", "Custo da Folha")[2] == "Quais diretorias concentram maior custo da folha?"
 
 
@@ -132,8 +132,8 @@ def test_current_interface_uses_v21_brand_and_exposes_discovery_views():
     root = Path(__file__).resolve().parents[2]
     index = (root / "frontend" / "index.html").read_text(encoding="utf-8")
     script = (root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
-    assert "BI SWISS KNIFE · V2.1" in index
-    assert "Diagnóstico · Semântica · Insights · Dashboard Blueprint" in index
+    assert "BI SWISS KNIFE · V2.2" in index
+    assert "Diagnóstico · Semântica · Insights · Priorização" in index
     assert "V0.3.0" not in index and "FERRAMENTA DE DIAGNÓSTICO DE DADOS" not in index
     for view in ("Visão Geral", "Diagnóstico", "Semântica", "Análises", "KPIs", "Dashboard Blueprint", "Segurança"):
         assert view in script
@@ -200,3 +200,78 @@ def test_discovery_does_not_call_network_services():
     with patch("urllib.request.urlopen", side_effect=AssertionError("network call")) as urlopen:
         _payload()
         urlopen.assert_not_called()
+
+
+def test_v22_scoring_rewards_relevant_measures_and_dimensions_and_penalizes_weaknesses():
+    from app.insights.engine import _relevance_score
+    from app.models.discovery_models import SemanticField
+
+    def field(name, role, distinct=8, completeness=100, confidence="high"):
+        return SemanticField(table="Aba", name=name, role=role, confidence=confidence, reason="teste",
+                             distinct_count=distinct, completeness_pct=completeness)
+
+    strong_dim, weak_dim = field("Diretoria", "dimension"), field("Coluna7", "dimension")
+    strong_measure, aux_measure = field("Risco Descoberto", "measure"), field("Código auxiliar", "measure")
+    base = _relevance_score("ranking", [strong_dim], [strong_measure], [], "high", [], 100)
+    assert base > _relevance_score("ranking", [strong_dim], [aux_measure], [], "high", [], 100)
+    assert base > _relevance_score("ranking", [weak_dim], [strong_measure], [], "high", [], 100)
+    assert base > _relevance_score("ranking", [strong_dim], [strong_measure], [], "high", ["warning"], 45)
+    assert base > _relevance_score("ranking", [strong_dim], [strong_measure], [], "medium", [], 100)
+    assert base > _relevance_score("ranking", [field("Diretoria", "dimension", distinct=900)],
+                                   [strong_measure], [], "high", [], 100)
+    assert _relevance_score("ranking", [strong_dim], [field("FGTS (Qtd)", "measure", confidence="high")],
+                            [], "high", [], 100) < base
+
+
+def test_v22_semantic_deduplication_collapses_cross_table_equivalents_only():
+    from app.insights.engine import _deduplicate
+    from app.models.discovery_models import Insight
+
+    def insight(title, dim, measure="Risco Descoberto", table="Aba 1", score=80):
+        return Insight(id=title, type="ranking", title=title, business_question="Pergunta", visual="barras",
+                       confidence="high", priority="high", relevance_score=score,
+                       dimensions=[{"table": table, "column": dim}], measures=[{"table": table, "column": measure}],
+                       reason="evidência", evidence=["campos analisados"])
+
+    items, removed = _deduplicate([
+        insight("Risco por Contratada", "Contratada", table="Aba 1", score=75),
+        insight("Risco por Contratada (outra aba)", "Contratada", table="Aba 2", score=82),
+        insight("Risco por Diretoria", "Diretoria"),
+        insight("Custo por Contratada", "Contratada", measure="Custo Total"),
+    ])
+    assert removed == 1
+    assert len(items) == 3
+    winner = next(item for item in items if "Contratada" in item.title and "outra" in item.title)
+    assert winner.relevance_score == 80
+    assert "penalidade de redundância" in winner.reason
+
+
+def test_v22_priority_requires_confidence_for_high_and_downgrades_weak_evidence():
+    from app.insights.engine import _priority
+    from app.models.discovery_models import SemanticField
+
+    strong_dim = SemanticField(table="A", name="Contratada", role="dimension", confidence="high", reason="x")
+    strong_measure = SemanticField(table="A", name="Risco Total", role="measure", confidence="high", reason="x")
+    weak_dim = SemanticField(table="A", name="Coluna7", role="dimension", confidence="high", reason="x")
+    assert _priority(90, "high", (), [strong_dim], [strong_measure]) == "high"
+    assert _priority(90, "medium", (), [strong_dim], [strong_measure]) == "medium"
+    assert _priority(90, "high", (), [weak_dim], [strong_measure]) != "high"
+    assert _priority(30, "high") == "low"
+
+
+def test_v22_blueprint_uses_only_prioritized_final_insights_and_limits_executive_page():
+    from app.blueprint.builder import build_dashboard_blueprint
+    from app.models.discovery_models import Insight, InsightsBlock, KpisBlock, SemanticModel
+
+    items = [Insight(id=f"item-{index}", type="ranking", title=f"Insight {index}",
+                     business_question="Pergunta", visual="barras", confidence="high", priority="high",
+                     relevance_score=90-index, reason="baseado em evidências", evidence=["metadados"],
+                     dimensions=[{"table": "A", "column": "Contratada"}],
+                     measures=[{"table": "A", "column": "Risco Total"}]) for index in range(8)]
+    items.append(Insight(id="low", type="ranking", title="Ignorado", business_question="Pergunta", visual="barras",
+                         confidence="low", priority="low", relevance_score=99, reason="evidência fraca", evidence=["x"]))
+    blueprint = build_dashboard_blueprint(SemanticModel(), InsightsBlock(generated=True, items=items), KpisBlock())
+    executive = next(page for page in blueprint.recommended_pages if page["name"] == "Visão Executiva")
+    assert len(executive["visuals"]) <= 5
+    assert all(item["priority"] in {"high", "medium"} for item in executive["visuals"])
+    assert "low" not in blueprint.insights
