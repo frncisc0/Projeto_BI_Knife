@@ -339,6 +339,8 @@ def analyze_file(
             warnings.append(f"O arquivo contém {metadata['tables_total']} abas; somente {settings.max_tables_to_analyze} foram analisadas.")
         if import_settings.get("delimiter_ambiguous"):
             warnings.append(f"O delimitador de '{table_name}' não foi identificado com segurança; foi usado {repr(import_settings.get('delimiter'))}.")
+        if file_type == "csv" and columns_total == 1:
+            warnings.append(f"O arquivo '{table_name}' possui apenas uma coluna. Verifique se o delimitador foi identificado corretamente.")
         if import_settings.get("header_ambiguous") and header_mode == "auto":
             warnings.append(f"A presença de cabeçalho em '{table_name}' é ambígua; a primeira linha foi tratada como dados e foram usados nomes genéricos para evitar expor possíveis valores no relatório.")
         worksheet_status = metadata.get("worksheet_status", "completed")

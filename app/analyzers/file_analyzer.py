@@ -324,9 +324,11 @@ def read_tables(
         decimal = options["decimal"] if decimal_separator == "auto" else decimal_separator
         has_header = options["has_header"] if header_mode == "auto" else header_mode == "true"
         header_arg: int | None = 0 if has_header else None
-        read_options = {"encoding": csv_encoding or "utf-8", "sep": delimiter, "decimal": decimal,
-                        "thousands": "." if decimal == "," else None,
-                        "header": header_arg, "engine": "python", "on_bad_lines": "error", "skip_blank_lines": False}
+        # Keep source cells as text so identifiers such as 00123 and mixed
+        # columns are not silently coerced. Profilers parse numeric values separately.
+        read_options = {"encoding": csv_encoding or "utf-8", "sep": delimiter,
+                        "header": header_arg, "engine": "python", "on_bad_lines": "error",
+                        "skip_blank_lines": False, "dtype": str}
         header_frame = pd.read_csv(BytesIO(content), nrows=0 if has_header else 1, **read_options)
         total_columns = len(header_frame.columns)
         selected_columns = list(header_frame.columns[:settings.max_columns_to_analyze])
@@ -360,5 +362,12 @@ def read_tables(
         return {"Dados": frame}
     except (AnalysisError, FileValidationError):
         raise
+    except pd.errors.ParserError as exc:
+        message = str(exc).casefold()
+        if "expected" in message or "fields" in message or "columns" in message:
+            raise AnalysisError("O CSV possui estrutura inconsistente entre as linhas. Verifique o delimitador e os campos entre aspas.") from exc
+        raise AnalysisError("Não foi possível interpretar a estrutura do CSV. Verifique aspas e delimitadores.") from exc
+    except UnicodeError as exc:
+        raise AnalysisError("Não foi possível interpretar a codificação do CSV.") from exc
     except Exception as exc:
         raise AnalysisError("O arquivo foi validado, mas não pôde ser analisado. Verifique a estrutura e tente novamente.") from exc

@@ -136,14 +136,25 @@ def validate_upload_detailed(filename: str | None, content: bytes) -> tuple[str,
         dialect = csv.Sniffer().sniff(text[:65536], delimiters=",;\t|")
         delimiter = dialect.delimiter
     except csv.Error:
-        delimiter = ";" if text.count(";") > text.count(",") else ","
+        counts = {candidate: text[:65536].count(candidate) for candidate in (",", ";", "\t", "|")}
+        delimiter = max(counts, key=counts.get) if any(counts.values()) else ","
     try:
-        rows = csv.reader(io.StringIO(text), delimiter=delimiter)
-        header = next(rows, None)
-        if not header or not any(cell.strip() for cell in header):
-            raise FileValidationError("O CSV não contém um cabeçalho válido.")
+        rows = csv.reader(io.StringIO(text), delimiter=delimiter, strict=True)
+        expected_width = None
+        record_count = 0
+        for row in rows:
+            # Empty physical lines are allowed; actual blank fields still count as columns.
+            if not row:
+                continue
+            if expected_width is None:
+                expected_width = len(row)
+            elif len(row) != expected_width:
+                raise FileValidationError("O CSV possui estrutura inconsistente entre as linhas. Verifique campos e delimitadores.")
+            record_count += 1
+        if not record_count:
+            raise FileValidationError("O CSV está vazio ou não contém registros legíveis.")
     except csv.Error as exc:
-        raise FileValidationError("Não foi possível ler a estrutura do CSV.") from exc
+        raise FileValidationError("Não foi possível interpretar a estrutura do CSV. Verifique aspas e delimitadores.") from exc
     return safe_name, "csv", encoding, None
 
 

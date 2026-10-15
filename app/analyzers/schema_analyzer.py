@@ -131,6 +131,15 @@ def physical_type(series: pd.Series) -> str:
         return "datetime"
     if isinstance(dtype, pd.CategoricalDtype):
         return "category"
+    # CSV cells are retained as text to avoid pandas stripping leading zeros.
+    # Still report their apparent physical numeric type when every populated
+    # value is safely numeric and has no zero-padded integer representation.
+    if pd.api.types.is_string_dtype(dtype) or dtype == object:
+        values = series.dropna().astype(str).str.strip()
+        if not values.empty and values.str.fullmatch(r"[+-]?(?:0|[1-9]\d*)").all():
+            return "integer"
+        if not values.empty and not values.str.match(r"[+-]?0\d+").any() and numeric_values(values).notna().all():
+            return "number"
     if pd.api.types.is_string_dtype(dtype) or dtype == object:
         return "string"
     return "unknown"
