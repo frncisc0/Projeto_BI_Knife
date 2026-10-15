@@ -90,8 +90,11 @@ def test_report_api_and_frontend_use_existing_payload_without_reanalysis(monkeyp
     pdf_response = export_pdf_report(batch)
     assert html_response.media_type.startswith("text/html")
     assert "test-report.csv" in html_response.body.decode("utf-8")
+    assert "test-report_" in html_response.headers["content-disposition"]
+    assert "_BI-Swiss-Knife.html" in html_response.headers["content-disposition"]
     assert pdf_response.media_type == "application/pdf"
     assert pdf_response.body.startswith(b"%PDF-")
+    assert "_BI-Swiss-Knife.pdf" in pdf_response.headers["content-disposition"]
 
 
 def test_pdf_api_names_missing_reportlab_dependency(monkeypatch):

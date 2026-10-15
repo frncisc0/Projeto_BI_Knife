@@ -22,6 +22,10 @@ def _status(value: Any) -> str:
             "partial": "Parcial", "failed": "Falha", "error": "Erro", "skipped": "Ignorada"}.get(str(value), str(value or "—"))
 
 
+def _confidence(value: Any) -> str:
+    return {"high": "alta", "medium": "média", "low": "baixa"}.get(str(value), "não disponível")
+
+
 def _duration(value: Any) -> str:
     try:
         seconds = max(0, int(value)) / 1000
@@ -188,6 +192,38 @@ def _human_summary_html(report: dict[str, Any], index: int) -> str:
             f'<ul>{pages}</ul></section>')
 
 
+def _structure_profiles_html(report: dict[str, Any]) -> str:
+    profiles = report.get("structure_profiles", [])
+    if not profiles:
+        return ""
+    sections = []
+    for profile in profiles:
+        grain = profile.get("grain_hypothesis") or {}
+        type_hypotheses = profile.get("table_type_hypotheses", [])
+        columns = "".join(
+            f'<li><b>{_text(column.get("name"))}</b> — {_text(column.get("role_label"))} '
+            f'(confiança {_text(_confidence(column.get("confidence")))}). '
+            f'{_text(" ".join(column.get("evidence", [])))} '
+            f'<details><summary>Limitações</summary><p>{_text(" ".join(column.get("limitations", [])))}</p></details></li>'
+            for column in profile.get("columns", [])
+        )
+        type_details = "".join(
+            f'<p><b>Tipo estrutural possível:</b> {_text(item.get("label"))} '
+            f'(confiança {_text(_confidence(item.get("confidence")))}). '
+            f'{_text(" ".join(item.get("evidence", [])))}</p>'
+            for item in type_hypotheses
+        )
+        sections.append(
+            f'<section><h4>{_text(profile.get("table_name"))}</h4><p>{_text(profile.get("summary"))}</p>'
+            f'<p><b>O que cada linha pode representar:</b> {_text(grain.get("label"))} '
+            f'(confiança {_text(_confidence(grain.get("confidence")))}).</p>'
+            f'{type_details}'
+            f'<details><summary>Campos, evidências e limitações</summary><ul>{columns}</ul>'
+            f'<p><b>Limitações:</b> {_text(" ".join(profile.get("limitations", [])))}</p></details></section>'
+        )
+    return '<h4>Como a tabela está organizada</h4>' + "".join(sections)
+
+
 def render_html_report(batch: dict[str, Any]) -> str:
     """Render a self-contained, offline report without re-reading source files."""
     reports = _reports(batch)
@@ -203,6 +239,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
                                f'{_text(report.get("file_type", "arquivo")).upper()} · {_text(_status(report.get("status")))} · '
                                f'{_text(_duration(report.get("processing_time_ms", 0)))} · analisado em {_text(report.get("analyzed_at"))}</p>'
                                f'{_human_summary_html(report, report_index)}'
+                               f'{_structure_profiles_html(report)}'
                                f'<h3 id="quality">Detalhes da qualidade</h3><div class="score"><strong>{_text(report.get("quality", {}).get("score"))}/100</strong>'
                                f'<span>{_text(report.get("quality", {}).get("classification"))}</span></div>'
                                f'<div class="dimensions">{_quality_bars(report.get("quality", {}))}</div>'

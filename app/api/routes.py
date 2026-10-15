@@ -12,6 +12,7 @@ from app.analyzers.relationship_analyzer import suggest_relationships
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.report_service import report_payload, refresh_discovery_payload
+from app.services.report_filename_service import content_disposition, report_filename
 from app.services.html_report_service import render_html_report
 from app.services.pdf_report_service import render_pdf_report
 from app.services.progress_tracker import create_analysis_job, get_analysis_job
@@ -39,7 +40,7 @@ def export_html_report(payload: dict = Body(...)) -> Response:
     _validate_report_payload(payload)
     content = render_html_report(payload)
     return Response(content=content, media_type="text/html; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="bi-swiss-knife-relatorio.html"',
+                    headers={"Content-Disposition": content_disposition(report_filename(payload, "html")),
                              "Cache-Control": "no-store"})
 
 
@@ -61,7 +62,7 @@ def export_pdf_report(payload: dict = Body(...)) -> Response:
         logger.error("PDF export import failure; error_type=%s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Falha interna ao carregar a exportação PDF.") from exc
     return Response(content=content, media_type="application/pdf",
-                    headers={"Content-Disposition": 'attachment; filename="bi-swiss-knife-relatorio-executivo.pdf"',
+                    headers={"Content-Disposition": content_disposition(report_filename(payload, "pdf")),
                              "Cache-Control": "no-store"})
 
 

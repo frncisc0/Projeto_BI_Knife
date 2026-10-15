@@ -20,6 +20,10 @@ def _status(value: Any) -> str:
     return {"completed": "Concluída", "partial": "Parcial", "failed": "Falha"}.get(str(value), str(value or "-"))
 
 
+def _confidence(value: Any) -> str:
+    return {"high": "alta", "medium": "média", "low": "baixa"}.get(str(value), "não disponível")
+
+
 def _duration(value: Any) -> str:
     try:
         seconds = max(0, int(value)) / 1000
@@ -92,6 +96,10 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
         story.append(Paragraph("Resumo Executivo", styles["Section"]))
         story.append(Paragraph(_safe(human.get("executive_summary", f"Análise do arquivo {filename}.")), styles["BodyText"]))
         story.append(Spacer(1, 3 * mm))
+        if human.get("what_was_found"):
+            story.append(Paragraph("O que encontramos", styles["Heading3"]))
+            for finding in human.get("what_was_found", [])[:12]:
+                story.append(Paragraph(f"• {_safe(finding)}", styles["SmallText"]))
         story.append(Paragraph("Qualidade dos dados", styles["Heading3"]))
         story.append(Paragraph(_safe(human.get("data_quality_summary", quality.get("classification", "Qualidade não informada."))), styles["BodyText"]))
         components = human.get("quality_components", [])
@@ -148,6 +156,20 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
     story.append(PageBreak())
     story.append(Paragraph("Detalhes técnicos", styles["Section"]))
     story.append(Paragraph("A partir desta seção, o relatório apresenta estrutura, métricas, evidências e informações de segurança para revisão técnica.", styles["SmallText"]))
+    story.append(Paragraph("Compreensão estrutural das tabelas", styles["Heading3"]))
+    for filename, report in reports:
+        for profile in report.get("structure_profiles", []):
+            grain = profile.get("grain_hypothesis") or {}
+            story.append(Paragraph(f"<b>{_safe(filename)} / {_safe(profile.get('table_name'))}</b> · "
+                                   f"{_safe(profile.get('summary'))}", styles["AlertText"]))
+            story.append(Paragraph(f"O que cada linha pode representar: {_safe(grain.get('label'))} "
+                                   f"(confiança {_safe(_confidence(grain.get('confidence')))}). "
+                                   f"Evidências: {_safe('; '.join(grain.get('evidence', [])))} "
+                                   f"Limitações: {_safe('; '.join(grain.get('limitations', [])))}", styles["SmallText"]))
+            for hypothesis in profile.get("table_type_hypotheses", []):
+                story.append(Paragraph(f"Tipo estrutural possível: {_safe(hypothesis.get('label'))} "
+                                       f"(confiança {_safe(_confidence(hypothesis.get('confidence')))}). "
+                                       f"{_safe('; '.join(hypothesis.get('evidence', [])))}", styles["SmallText"]))
     story.extend([Paragraph("1. Resumo", styles["Section"]),
                   _metric_table([("Abas", total_sheets), ("Registros avaliados", total_rows),
                                  ("Colunas", total_columns), ("Tipos de pontos de atenção", len(all_alerts))], Table, TableStyle, colors, pale, styles),

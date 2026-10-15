@@ -1,3 +1,5 @@
+import { reportDownloadFilename } from './report_names.js';
+
 const input = document.querySelector('#file-input');
 const folderInput = document.querySelector('#folder-input');
 const drop = document.querySelector('#drop-zone');
@@ -148,7 +150,7 @@ button.addEventListener('click', async () => {
     renderBatch(payload);
     const succeeded = payload.results.filter(item => item.analysis && item.analysis.status !== 'failed').length;
     const failed = payload.results.length - succeeded;
-    downloadReport(JSON.stringify(payload, null, 2), 'application/json', 'bi-swiss-knife-relatorio.json');
+    downloadReport(JSON.stringify(payload, null, 2), 'application/json', reportDownloadFilename(payload, 'json'));
     showStatus(failed
       ? `${succeeded} arquivo(s) analisado(s); ${failed} com erro. O relatório JSON foi baixado para o computador.`
       : `${succeeded} arquivo(s) analisado(s). O relatório JSON foi baixado para o computador.`, failed ? '' : 'success');
@@ -265,13 +267,13 @@ function renderBatch(batch) {
   }).join('');
   const details = successes.length ? `<div class="panel"><div class="table-head"><h3>Detalhes do arquivo</h3><select class="table-select" id="file-select">${successes.map((item, i) => `<option value="${i}">${escapeHtml(item.filename)}</option>`).join('')}</select></div><div id="file-details"></div></div>` : '<div class="panel subtle">Nenhum arquivo pôde ser analisado.</div>';
   resultEl.hidden = false;
-  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">Baixar JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">Abrir HTML offline</button><button id="export-pdf" class="secondary-button">Exportar PDF</button></div></div>
+  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">Baixar JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">Baixar HTML offline</button><button id="export-pdf" class="secondary-button">Exportar PDF</button></div></div>
     <div class="metric-grid"><div class="metric"><label>LINHAS</label><strong>${totalRows.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>COLUNAS</label><strong>${totalColumns.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>ITENS PARA REVISAR</label><strong class="${issueCount ? 'quality-bad' : ''}">${issueCount.toLocaleString('pt-BR')}</strong><span class="subtle">sem contar ausências</span></div></div>
     <div class="panel"><h3>Arquivos selecionados</h3>${fileRows}</div>${details}`;
-  resultEl.querySelector('#export-json').addEventListener('click', () => downloadReport(JSON.stringify(batch, null, 2), 'application/json', 'bi-swiss-knife-relatorio.json'));
-  resultEl.querySelector('#export-csv').addEventListener('click', () => downloadReport(batchCsv(batch), 'text/csv;charset=utf-8', 'bi-swiss-knife-resumo.csv'));
-  resultEl.querySelector('#export-html').addEventListener('click', () => exportDerivedReport(batch, '/api/report-html', 'text/html;charset=utf-8', 'bi-swiss-knife-relatorio.html', true));
-  resultEl.querySelector('#export-pdf').addEventListener('click', () => exportDerivedReport(batch, '/api/report-pdf', 'application/pdf', 'bi-swiss-knife-relatorio-executivo.pdf'));
+  resultEl.querySelector('#export-json').addEventListener('click', () => downloadReport(JSON.stringify(batch, null, 2), 'application/json', reportDownloadFilename(batch, 'json')));
+  resultEl.querySelector('#export-csv').addEventListener('click', () => downloadReport(batchCsv(batch), 'text/csv;charset=utf-8', reportDownloadFilename(batch, 'csv')));
+  resultEl.querySelector('#export-html').addEventListener('click', () => exportDerivedReport(batch, '/api/report-html', 'text/html;charset=utf-8', 'html'));
+  resultEl.querySelector('#export-pdf').addEventListener('click', () => exportDerivedReport(batch, '/api/report-pdf', 'application/pdf', 'pdf'));
   if (successes.length) {
     const selector = resultEl.querySelector('#file-select');
     const update = () => renderFileDetails(successes[Number(selector.value)].analysis);
@@ -292,9 +294,7 @@ function downloadReport(content, type, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function exportDerivedReport(batch, endpoint, mediaType, filename, openInTab = false) {
-  const preview = openInTab ? window.open('about:blank', '_blank') : null;
-  if (preview) preview.opener = null;
+async function exportDerivedReport(batch, endpoint, mediaType, extension) {
   try {
     const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(batch) });
@@ -304,16 +304,10 @@ async function exportDerivedReport(batch, endpoint, mediaType, filename, openInT
       throw new Error(detail);
     }
     const blob = await response.blob();
-    if (preview) {
-      const url = URL.createObjectURL(new Blob([blob], { type: mediaType }));
-      preview.location.replace(url);
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } else {
-      downloadReport(blob, mediaType, filename);
-    }
-    showStatus(filename.endsWith('.pdf') ? 'PDF executivo gerado localmente.' : 'HTML offline aberto em outra guia.', 'success');
+    const filename = reportDownloadFilename(batch, extension);
+    downloadReport(blob, mediaType, filename);
+    showStatus(`${extension.toUpperCase()} gerado localmente: ${filename}`, 'success');
   } catch (error) {
-    if (preview) preview.close();
     showStatus(error.message || 'Não foi possível gerar o relatório.', 'error');
   }
 }
@@ -415,6 +409,7 @@ function renderV3Overview(report) {
     ${v21Metric('QUALIDADE GERAL', `${Number(report.quality?.score || 0).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1})}/100`, report.quality?.classification || '')}</div>
     <div class="quality-component-grid">${components.map(component => `<div><b>${escapeHtml(component.name)}</b><strong>${Number(component.value || 0).toLocaleString('pt-BR', {maximumFractionDigits: 1})}%</strong><small>${escapeHtml(component.description)}</small></div>`).join('')}</div></section>
     <section class="panel"><h2>O que encontramos</h2><ul class="human-summary-list">${(summary.what_was_found || []).map(text => `<li>${escapeHtml(text)}</li>`).join('') || '<li>Não foi possível resumir os campos identificados.</li>'}</ul></section>
+    ${renderStructureTechnical(report)}
     <section class="panel"><div class="table-head"><div><h2>Principais descobertas</h2><p>Possibilidades de análise sustentadas pelos campos encontrados.</p></div><button class="secondary-button" data-go-view="discoveries">Ver descobertas</button></div>
     <div class="insight-grid">${findings.slice(0, 3).map(item => renderHumanFinding(item)).join('') || '<p class="subtle">Não há descobertas prioritárias com evidência suficiente.</p>'}</div></section>
     <section class="panel"><h2>Pontos de atenção</h2>${attention.slice(0, 3).map(point => `<div class="human-attention severity-${escapeHtml(point.severity)}"><b>${escapeHtml({critical:'Problema crítico',attention:'Atenção',information:'Informação'}[point.severity] || 'Informação')}</b><p>${escapeHtml(point.message)}</p></div>`).join('') || '<p class="subtle">Nenhum ponto de atenção foi registrado.</p>'}</section>
@@ -467,6 +462,28 @@ function renderV3Technical(report, state) {
     <details><summary>Diagnóstico completo por aba</summary>${renderV21Diagnosis(report, state)}</details>
     <details><summary>Insights, evidências e avisos técnicos</summary>${renderV21Insights(report, {...state, showAllInsights: true})}</details>
     <details><summary>KPIs e cálculos candidatos</summary>${renderV21Kpis(report, {...state, showAllKpis: true})}</details></section>`;
+}
+
+function structuralConfidence(value) {
+  return ({ high: 'alta', medium: 'média', low: 'baixa' })[value] || 'não disponível';
+}
+
+function structuralType(value) {
+  return ({ string: 'texto', integer: 'número inteiro', number: 'número', datetime: 'data e hora',
+    boolean: 'sim/não', category: 'categoria', unknown: 'não identificado' })[value] || value || 'não identificado';
+}
+
+function renderStructureTechnical(report) {
+  const profiles = report.structure_profiles || [];
+  if (!profiles.length) return '';
+  return `<section class="panel"><details><summary>🔎 Ver detalhes técnicos da estrutura</summary>${profiles.map(profile => {
+    const grain = profile.grain_hypothesis || {};
+    const tableTypes = (profile.table_type_hypotheses || []).map(item => `<article class="relationship"><b>${escapeHtml(item.label)}</b> · confiança ${structuralConfidence(item.confidence)}<div class="subtle">${(item.evidence || []).map(escapeHtml).join(' · ')}</div><div class="subtle">Limitações: ${(item.limitations || []).map(escapeHtml).join(' · ')}</div></article>`).join('');
+    const columns = (profile.columns || []).map(column => `<tr><td>${escapeHtml(column.name)}<div class="subtle">Nome normalizado: ${escapeHtml(column.normalized_name)}</div></td><td>${escapeHtml(column.role_label)} (confiança ${structuralConfidence(column.confidence)})</td><td>${escapeHtml(structuralType(column.physical_type))} · ${escapeHtml(column.inferred_type)}</td><td>${Number(column.completeness_pct || 0)}%</td><td>${Number(column.distinct_count || 0)} (${Number(column.distinct_pct || 0)}%)</td><td>${escapeHtml(column.cardinality)} — valores diferentes em relação aos registros preenchidos</td><td>${(column.evidence || []).map(escapeHtml).join(' · ')}<div class="subtle">${(column.limitations || []).map(escapeHtml).join(' · ')}</div></td></tr>`).join('');
+    const keys = (profile.candidate_keys || []).map(key => `<article class="relationship"><b>${(key.columns || []).map(escapeHtml).join(' + ')}</b> · possível identificador · confiança ${structuralConfidence(key.confidence)}<div class="subtle">${(key.reasons || []).map(escapeHtml).join(' · ')}. Candidato estrutural, não confirmação de chave oficial.</div></article>`).join('');
+    const relations = (profile.relationships || []).map(item => `<article class="relationship"><b>${escapeHtml(item.source_table)}.${escapeHtml(item.source_column)}</b> → <b>${escapeHtml(item.target_table)}.${escapeHtml(item.target_column)}</b> · possível relação (confiança ${structuralConfidence(item.confidence)})<div class="subtle">${escapeHtml(item.reason)}</div></article>`).join('');
+    return `<article class="structure-detail"><h3>${escapeHtml(profile.table_name)}</h3><p><b>O que cada linha pode representar:</b> ${escapeHtml(grain.label)} Confiança ${structuralConfidence(grain.confidence)}.</p><p class="subtle"><b>Evidências:</b> ${(grain.evidence || []).map(escapeHtml).join(' · ') || 'Nenhuma evidência suficiente.'} <b>Limitações:</b> ${(grain.limitations || []).map(escapeHtml).join(' · ')}</p>${tableTypes}<h4>Campos e evidências</h4><p class="subtle">Valores diferentes mostram quantos conteúdos distintos foram vistos; confiança indica quanto os sinais observados sustentam a hipótese.</p><div class="scroll"><table><thead><tr><th>Campo</th><th>Papel provável</th><th>Tipos físico e provável</th><th>Preenchimento</th><th>Valores distintos</th><th>Repetição</th><th>Evidências e limitações</th></tr></thead><tbody>${columns || '<tr><td colspan="7">Nenhuma coluna foi perfilada.</td></tr>'}</tbody></table></div><h4>Possíveis chaves</h4>${keys || '<p class="subtle">Nenhum candidato a chave foi encontrado.</p>'}<h4>Possíveis relações</h4>${relations || '<p class="subtle">Nenhuma relação foi identificada com evidência suficiente.</p>'}<p class="warning">${(profile.structural_warnings || []).map(escapeHtml).join(' · ')}</p><p class="subtle">Limitação: ${(profile.limitations || []).map(escapeHtml).join(' · ')}</p></article>`;
+  }).join('')}</details></section>`;
 }
 
 function renderSemanticFields(fields, emptyText) {

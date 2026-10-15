@@ -35,6 +35,61 @@ class SemanticTable(BaseModel):
     identifiers: list[SemanticField] = Field(default_factory=list)
 
 
+class StructuralHypothesis(BaseModel):
+    label: str
+    confidence: Confidence
+    evidence: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class StructuralColumn(BaseModel):
+    name: str
+    normalized_name: str
+    role: str
+    role_label: str
+    confidence: Confidence
+    physical_type: str
+    inferred_type: str
+    value_count: int
+    null_count: int
+    null_pct: float
+    completeness_pct: float
+    distinct_count: int
+    distinct_pct: float
+    cardinality: str
+    duplicate_count: int
+    key_candidate: bool
+    sensitive: bool = False
+    zero_count: int | None = None
+    negative_count: int | None = None
+    statistics: dict[str, Any] = Field(default_factory=dict)
+    evidence: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class TableStructureProfile(BaseModel):
+    version: str = "1.0"
+    table_name: str
+    row_count: int
+    evaluated_row_count: int
+    column_count: int
+    summary: str
+    grain_hypothesis: StructuralHypothesis
+    table_type_hypotheses: list[StructuralHypothesis] = Field(default_factory=list)
+    columns: list[StructuralColumn] = Field(default_factory=list)
+    candidate_keys: list[dict[str, Any]] = Field(default_factory=list)
+    candidate_foreign_keys: list[dict[str, Any]] = Field(default_factory=list)
+    relationships: list[dict[str, Any]] = Field(default_factory=list)
+    temporal_columns: list[str] = Field(default_factory=list)
+    measures: list[str] = Field(default_factory=list)
+    dimensions: list[str] = Field(default_factory=list)
+    identifiers: list[str] = Field(default_factory=list)
+    structural_warnings: list[str] = Field(default_factory=list)
+    confidence: Confidence
+    evidence: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class SemanticModel(BaseModel):
     tables: list[SemanticTable] = Field(default_factory=list)
     table_type: str = "desconhecida"
