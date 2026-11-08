@@ -32,9 +32,12 @@ Abra **http://127.0.0.1:8000** no navegador.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-python -m pytest -q
+ruff check app tests          # lint (regras em pyproject.toml)
+python -m pytest --cov        # testes + cobertura
 node --test tests/frontend/report_names.test.mjs
 ```
+
+A integração contínua (`.github/workflows/ci.yml`) roda lint, testes em Windows e Linux com Python 3.11 e 3.12, testes do frontend e auditoria de dependências a cada pull request.
 
 ### Documentação do projeto
 

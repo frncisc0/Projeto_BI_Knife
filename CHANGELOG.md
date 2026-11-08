@@ -1,5 +1,18 @@
 # Changelog
 
+## [Não lançado] — rumo à 3.1.0 (Fundação)
+
+### Adicionado
+- Integração contínua (GitHub Actions): lint com ruff, testes em Windows e Linux (Python 3.11 e 3.12), testes do frontend, cobertura e `pip-audit`.
+- `pyproject.toml` centralizando a configuração de pytest, cobertura e ruff.
+
+### Corrigido
+- A exportação HTML usava sintaxe de f-string exclusiva do Python 3.12; no Python 3.11 o módulo nem carregava (8 arquivos de teste falhavam na importação).
+- Callback de progresso do lote agora fixa os valores do laço (aviso B023).
+
+### Interno
+- Imports ordenados e código morto removido (variáveis nunca usadas, comparação de tipo frágil).
+
 ## 3.0.1 — 2026-11-08
 
 Versão de correção baseada na auditoria técnica (`docs/01_DIAGNOSTICO_TECNICO.md`). Cada defeito tem teste de regressão em `tests/unit/test_v301_regressions.py`.
