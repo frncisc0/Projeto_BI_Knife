@@ -228,16 +228,22 @@ function chooseHeader(filename) {
 }
 
 async function resolveAmbiguousHeaders(batch, options, files) {
+  // Ask about every ambiguous file first, then analyse the WHOLE batch again with
+  // one header choice per file. Re-analysing a single file alone would drop the
+  // relationships between files (e.g. vendas.cliente_id -> clientes.cliente_id).
+  const modes = batch.results.map(() => 'auto');
+  let changed = false;
   for (let index = 0; index < batch.results.length; index += 1) {
     const item = batch.results[index];
     if (!item.analysis || !item.analysis.warnings.some(warning => warning.includes('é ambígua'))) continue;
     const choice = await chooseHeader(item.filename);
     if (choice === null) continue;
-    const file = files[index];
-    const corrected = await submitBatchWithProgress([file], { ...options, header_mode: choice });
-    if (corrected.results[0]?.analysis) item.analysis = corrected.results[0].analysis;
-    else item.error = corrected.results[0]?.error || 'Não foi possível reanalisar com a escolha informada.';
+    modes[index] = choice;
+    changed = true;
   }
+  if (!changed) return;
+  const corrected = await submitBatchWithProgress(files, { ...options, header_modes: JSON.stringify(modes) });
+  Object.assign(batch, corrected);
 }
 
 function showStatus(message, type = '') {
@@ -267,13 +273,14 @@ function renderBatch(batch) {
   }).join('');
   const details = successes.length ? `<div class="panel"><div class="table-head"><h3>Detalhes do arquivo</h3><select class="table-select" id="file-select">${successes.map((item, i) => `<option value="${i}">${escapeHtml(item.filename)}</option>`).join('')}</select></div><div id="file-details"></div></div>` : '<div class="panel subtle">Nenhum arquivo pôde ser analisado.</div>';
   resultEl.hidden = false;
-  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">Baixar JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">Baixar HTML offline</button><button id="export-pdf" class="secondary-button">Exportar PDF</button></div></div>
+  resultEl.innerHTML = `<div class="results-head"><div><h2>Visão geral da seleção</h2><div class="subtle">${analyzedCount} de ${batch.file_count} arquivo(s) analisado(s) · ${successes.length} relatório(s) disponível(is)</div></div><div class="export-actions"><button id="export-json" class="secondary-button">Baixar JSON</button><button id="export-csv" class="secondary-button">CSV resumo</button><button id="export-html" class="secondary-button">Baixar HTML offline</button><button id="export-pdf" class="secondary-button">Exportar PDF</button><button id="export-markdown" class="secondary-button" title="Estrutura dos dados, sem nenhum valor, pronta para colar em uma IA">Exportar Markdown</button></div></div>
     <div class="metric-grid"><div class="metric"><label>LINHAS</label><strong>${totalRows.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>COLUNAS</label><strong>${totalColumns.toLocaleString('pt-BR')}</strong></div><div class="metric"><label>ITENS PARA REVISAR</label><strong class="${issueCount ? 'quality-bad' : ''}">${issueCount.toLocaleString('pt-BR')}</strong><span class="subtle">sem contar ausências</span></div></div>
     <div class="panel"><h3>Arquivos selecionados</h3>${fileRows}</div>${details}`;
   resultEl.querySelector('#export-json').addEventListener('click', () => downloadReport(JSON.stringify(batch, null, 2), 'application/json', reportDownloadFilename(batch, 'json')));
   resultEl.querySelector('#export-csv').addEventListener('click', () => downloadReport(batchCsv(batch), 'text/csv;charset=utf-8', reportDownloadFilename(batch, 'csv')));
   resultEl.querySelector('#export-html').addEventListener('click', () => exportDerivedReport(batch, '/api/report-html', 'text/html;charset=utf-8', 'html'));
   resultEl.querySelector('#export-pdf').addEventListener('click', () => exportDerivedReport(batch, '/api/report-pdf', 'application/pdf', 'pdf'));
+  resultEl.querySelector('#export-markdown').addEventListener('click', () => exportDerivedReport(batch, '/api/report-markdown', 'text/markdown;charset=utf-8', 'md'));
   if (successes.length) {
     const selector = resultEl.querySelector('#file-select');
     const update = () => renderFileDetails(successes[Number(selector.value)].analysis);
@@ -306,7 +313,9 @@ async function exportDerivedReport(batch, endpoint, mediaType, extension) {
     const blob = await response.blob();
     const filename = reportDownloadFilename(batch, extension);
     downloadReport(blob, mediaType, filename);
-    showStatus(`${extension.toUpperCase()} gerado localmente: ${filename}`, 'success');
+    showStatus(extension === 'md'
+      ? `Markdown gerado localmente: ${filename}. Ele descreve só a estrutura (sem valores dos dados) e pode ser colado em uma IA.`
+      : `${extension.toUpperCase()} gerado localmente: ${filename}`, 'success');
   } catch (error) {
     showStatus(error.message || 'Não foi possível gerar o relatório.', 'error');
   }

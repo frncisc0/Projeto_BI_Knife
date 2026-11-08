@@ -15,6 +15,7 @@ from app.core.exceptions import AnalysisError, FileValidationError
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.html_report_service import render_html_report
+from app.services.markdown_report_service import render_markdown_report
 from app.services.pdf_report_service import render_pdf_report
 from app.services.progress_tracker import create_analysis_job, get_analysis_job
 from app.services.report_filename_service import content_disposition, report_filename
@@ -46,6 +47,16 @@ def export_html_report(payload: dict = Body(...)) -> Response:
                              "Cache-Control": "no-store"})
 
 
+@router.post("/report-markdown")
+def export_markdown_report(payload: dict = Body(...)) -> Response:
+    """Structure-only Markdown (no data values) to paste into an AI assistant."""
+    _validate_report_payload(payload)
+    content = render_markdown_report(payload)
+    return Response(content=content.encode("utf-8"), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": content_disposition(report_filename(payload, "md")),
+                             "Cache-Control": "no-store"})
+
+
 @router.post("/report-pdf")
 def export_pdf_report(payload: dict = Body(...)) -> Response:
     _validate_report_payload(payload)
@@ -66,6 +77,22 @@ def export_pdf_report(payload: dict = Body(...)) -> Response:
     return Response(content=content, media_type="application/pdf",
                     headers={"Content-Disposition": content_disposition(report_filename(payload, "pdf")),
                              "Cache-Control": "no-store"})
+
+
+def _header_modes(raw: str | None, count: int, default: str) -> list[str]:
+    """Per-file header choices (JSON list aligned with the uploads); default for every file when absent.
+
+    The UI sends this after the user answers the ambiguous-header dialog, so the whole
+    batch is analysed again together and cross-file relationships are preserved."""
+    if not isinstance(raw, str) or raw == "":  # absent (or a Form default when called directly)
+        return [default] * count
+    try:
+        modes = json.loads(raw)
+    except ValueError as exc:
+        raise FileValidationError("Escolhas de cabeçalho inválidas.") from exc
+    if not isinstance(modes, list) or len(modes) != count or any(mode not in {"auto", "true", "false"} for mode in modes):
+        raise FileValidationError("Escolhas de cabeçalho inválidas.")
+    return modes
 
 
 def _validate_csv_options(delimiter: str, decimal_separator: str, header_mode: str) -> None:
@@ -163,9 +190,11 @@ async def analyze_batch(
     csv_delimiter: str = Form("auto"),
     decimal_separator: str = Form("auto"),
     header_mode: str = Form("auto"),
+    header_modes: str | None = Form(None),
 ) -> dict:
     """Analyze multiple local uploads independently and retain per-file errors."""
-    return await _analyze_batch_impl(uploads, csv_delimiter, decimal_separator, header_mode)
+    return await _analyze_batch_impl(uploads, csv_delimiter, decimal_separator, header_mode,
+                                     header_modes=header_modes)
 
 
 async def _analyze_batch_impl(
@@ -174,11 +203,13 @@ async def _analyze_batch_impl(
     decimal_separator: str,
     header_mode: str,
     progress_callback=None,
+    header_modes: str | None = None,
 ) -> dict:
     """Shared batch implementation for synchronous and progress-job routes."""
     settings = get_settings()
     try:
         _validate_csv_options(csv_delimiter, decimal_separator, header_mode)
+        file_header_modes = _header_modes(header_modes, len(uploads), header_mode)
     except FileValidationError as exc:
         for upload in uploads:
             await upload.close()
@@ -230,7 +261,7 @@ async def _analyze_batch_impl(
                                            "total_files": len(uploads), "filename": filename,
                                            "file_type": file_type})
                 analysis = await run_in_threadpool(analyze_file, filename or safe_name, file_type, content, encoding,
-                                        csv_delimiter, decimal_separator, header_mode,
+                                        csv_delimiter, decimal_separator, file_header_modes[upload_index],
                                         relationship_frames=relationship_frames,
                                         relationship_budget=file_relationship_budget,
                                         relationship_prefix=f"{upload_index}:{filename or safe_name}",
@@ -296,11 +327,13 @@ async def start_analysis_with_progress(
     csv_delimiter: str = Form("auto"),
     decimal_separator: str = Form("auto"),
     header_mode: str = Form("auto"),
+    header_modes: str | None = Form(None),
 ) -> dict[str, str]:
     """Accept local uploads and start a background job whose polling state follows backend work."""
     settings = get_settings()
     try:
         _validate_csv_options(csv_delimiter, decimal_separator, header_mode)
+        _header_modes(header_modes, len(uploads), header_mode)
     except FileValidationError as exc:
         for upload in uploads:
             await upload.close()
@@ -329,7 +362,7 @@ async def start_analysis_with_progress(
     async def run_batch(progress_callback):
         stored_uploads = [StoredUploadFile(filename=name, file=BytesIO(content)) for name, content in stored_files]
         return await _analyze_batch_impl(stored_uploads, csv_delimiter, decimal_separator, header_mode,
-                                         progress_callback=progress_callback)
+                                         progress_callback=progress_callback, header_modes=header_modes)
 
     def worker(progress_callback):
         return asyncio.run(run_batch(progress_callback))
