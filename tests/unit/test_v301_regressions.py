@@ -152,3 +152,19 @@ def test_v302_out_of_range_date_candidates_do_not_crash_analysis():
     content = b"sku,descricao,qtd\nP12,Caneta,3\nAB-1001,Caderno,10\n00123,Borracha,7\nP900,Lapis,1\n"
     report = analyze_file("codes.csv", "csv", content, "utf-8", header_mode="true")
     assert _columns(report)["sku"].inferred_type == "categórico"
+
+
+# --- v3.0.3: progress reporting on large CSV must not abort the analysis -------
+
+def test_v303_csv_larger_than_one_chunk_with_progress_callback():
+    """The UI always passes a progress callback; CSV files above 50,000 rows
+    (more than one read chunk) failed with 'OSError: telling position disabled'."""
+    from app.analyzers.file_analyzer import read_tables
+
+    content = ("id,valor\n" + "".join(f"{i},{i % 97}\n" for i in range(60_000))).encode()
+    events = []
+    frames = read_tables(content, "csv", "utf-8", on_progress=events.append)
+    assert frames["Dados"].attrs["total_rows"] == 60_000
+    fractions = [event["stage_progress"] for event in events if event.get("stage") == "csv_reading"]
+    assert fractions and fractions == sorted(fractions)  # monotonic
+    assert 0 < fractions[0] <= 1 and fractions[-1] == pytest.approx(1.0, abs=0.01)

@@ -334,6 +334,9 @@ def read_tables(
         selected_columns = list(header_frame.columns[:settings.max_columns_to_analyze])
         # Count rows in bounded chunks, then load only the configured profile sample.
         total_rows = 0
+        # Progress is measured in physical lines: asking the reader for its byte
+        # position (tell) is not allowed while pandas iterates the file.
+        physical_lines = max(1, content.count(b"\n") + (0 if content.endswith(b"\n") else 1) - (1 if has_header else 0))
         reader = pd.read_csv(BytesIO(content), chunksize=50000, **read_options)
         try:
             for chunk in reader:
@@ -341,8 +344,7 @@ def read_tables(
                     raise AnalysisError("A análise excedeu o tempo máximo configurado.")
                 total_rows += len(chunk)
                 if on_progress:
-                    processed = reader.handles.handle.tell()
-                    on_progress({"stage": "csv_reading", "stage_progress": min(1.0, processed / max(1, len(content))),
+                    on_progress({"stage": "csv_reading", "stage_progress": min(1.0, total_rows / physical_lines),
                                  "records_scanned": total_rows, "current_sheet": 1, "total_sheets": 1,
                                  "message": f"Contando registros CSV: {total_rows:,}"})
         finally:
