@@ -1,0 +1,6 @@
+id;categoria;cidade;valor;data_venda
+1;Eletrônicos;São Paulo;1.234,50;10/01/2024
+2;Móveis;Goiânia;80,00;05/02/2024
+3;Eletrônicos;São Paulo;2.500,00;15/03/2024
+4;Móveis;Brasília;;20/03/2024
+5;Eletrônicos;Goiânia;99,90;01/04/2024
