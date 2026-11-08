@@ -5,6 +5,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
+_NO_ALERTS_HTML = '<p class="muted">Nenhum alerta.</p>'
+
 
 def _text(value: Any, fallback: str = "—") -> str:
     return escape(str(value if value is not None else fallback), quote=True)
@@ -85,7 +87,7 @@ def _quality_bars(quality: dict[str, Any]) -> str:
 def _column_rows(table: dict[str, Any]) -> str:
     assessments = {
         "strong_candidate": "Candidato forte", "possible_identifier": "Possível identificador",
-        "high_uniqueness_measure": "Medida altamente única; não é chave", 
+        "high_uniqueness_measure": "Medida altamente única; não é chave",
         "high_uniqueness_unconfirmed": "Alta unicidade sem evidência semântica", "not_candidate": "Não candidato",
     }
     return "".join(
@@ -243,7 +245,7 @@ def render_html_report(batch: dict[str, Any]) -> str:
                                f'<h3 id="quality">Detalhes da qualidade</h3><div class="score"><strong>{_text(report.get("quality", {}).get("score"))}/100</strong>'
                                f'<span>{_text(report.get("quality", {}).get("classification"))}</span></div>'
                                f'<div class="dimensions">{_quality_bars(report.get("quality", {}))}</div>'
-                               f'<h3>Pontos de atenção</h3>{"".join(_alert_html(alert) for table in report.get("tables", []) for alert in _alerts(table.get("quality", {}))) or "<p class=\"muted\">Nenhum alerta.</p>"}'
+                               f'<h3>Pontos de atenção</h3>{"".join(_alert_html(alert) for table in report.get("tables", []) for alert in _alerts(table.get("quality", {}))) or _NO_ALERTS_HTML}'
                                f'<h3 id="sheets">Abas analisadas</h3>{"".join(_table_html(table, i) for i, table in enumerate(report.get("tables", [])))}'
                                f'<h3 id="relationships">Relações potenciais</h3>{_relationships_html(report)}'
                                f'{_discovery_html(report)}'
