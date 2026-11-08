@@ -1,5 +1,11 @@
 # Changelog
 
+## [Não lançado] — rumo à 3.1.0 (Fundação)
+
+### Interno
+- `analyze_file` decomposta de 293 para 60 linhas: orquestrador de etapas com responsabilidade única. Chaves, score de qualidade e classificação de tabela foram para módulos próprios (`app/analyzers/keys.py`, `quality_score.py`, `table_kind.py`). Os snapshots de caracterização permaneceram idênticos.
+- Normalização de texto centralizada em `app/core/text.py` (3 cópias idênticas removidas); a regra de classificação da qualidade deixou de ser repetida em `routes.py`.
+
 ## 3.0.3 — 2026-11-08
 
 ### Corrigido

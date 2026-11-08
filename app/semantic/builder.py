@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
 
+from app.core.text import fold
 from app.models.analysis_models import FileAnalysis
 from app.models.discovery_models import SemanticField, SemanticModel, SemanticTable
 
 
-def _norm(value: str) -> str:
-    value = unicodedata.normalize("NFKD", value.casefold())
-    return "".join(char for char in value if not unicodedata.combining(char))
-
-
 def _format(column: Any) -> str:
-    inferred = _norm(column.inferred_type)
-    if "moeda" in inferred or any(word in _norm(column.name) for word in ("custo", "valor", "risco", "salario", "passivo", "encargo", "retencao", "garantia")):
+    inferred = fold(column.inferred_type)
+    if "moeda" in inferred or any(word in fold(column.name) for word in ("custo", "valor", "risco", "salario", "passivo", "encargo", "retencao", "garantia")):
         return "currency"
-    if "percent" in inferred or "percent" in _norm(column.name) or "aderencia" in _norm(column.name):
+    if "percent" in inferred or "percent" in fold(column.name) or "aderencia" in fold(column.name):
         return "percentage"
     if "inteiro" in inferred:
         return "integer"
@@ -163,8 +158,8 @@ def build_semantic_model(analysis: FileAnalysis) -> SemanticModel:
         "recursos humanos": ("colaborador", "funcionario", "gestor", "salario"),
     }
     names = " ".join([table.name for table in analysis.tables] + [column.name for table in analysis.tables for column in table.column_analyses])
-    normalized_names = _norm(names)
-    domains = [domain for domain, terms in domain_rules.items() if any(_norm(term) in normalized_names for term in terms)]
+    normalized_names = fold(names)
+    domains = [domain for domain, terms in domain_rules.items() if any(fold(term) in normalized_names for term in terms)]
     if not semantic_tables:
         warnings.append("Nenhuma tabela produziu evidência semântica suficiente.")
     all_types = [table.table_type for table in semantic_tables]

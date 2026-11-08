@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StoredUploadFile
 
+from app.analyzers.quality_score import classify_quality
 from app.analyzers.relationship_analyzer import suggest_relationships
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError, FileValidationError
@@ -145,12 +146,8 @@ def _apply_integrity_quality(quality: dict, report_settings: dict, integrity_pct
     score = round(sum(dimensions[name] * weights.get(name, 0) for name in dimensions) / total_weight, 1)
     thresholds = report_settings.get("quality_thresholds", {})
     quality["score"] = score
-    quality["classification"] = (
-        "Excelente" if score >= thresholds.get("excellent", 95)
-        else "Boa" if score >= thresholds.get("good", 85)
-        else "Atenção" if score >= thresholds.get("attention", 65)
-        else "Baixa"
-    )
+    quality["classification"] = classify_quality(
+        score, thresholds.get("excellent", 95), thresholds.get("good", 85), thresholds.get("attention", 65))
     quality["integrity_pct"] = round(integrity_pct, 1)
     quality["integrity_assessed"] = True
     if integrity_pct < 95:

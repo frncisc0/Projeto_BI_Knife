@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from typing import Any
 
+from app.core.text import fold
 from app.models.analysis_models import FileAnalysis
 from app.models.discovery_models import CalculationCandidate, Insight, InsightsBlock, KpisBlock, SemanticModel
-
-
-def _norm(value: str) -> str:
-    value = unicodedata.normalize("NFKD", value.casefold())
-    return "".join(char for char in value if not unicodedata.combining(char))
 
 
 def _ref(field: Any) -> dict[str, str]:
@@ -50,7 +45,7 @@ def _priority(score: int, confidence: str = "high", warnings=(), dimensions=(), 
 
 
 def _tokens(value: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", _norm(value)))
+    return set(re.findall(r"[a-z0-9]+", fold(value)))
 
 
 def _dimension_strength(name: str) -> int:
@@ -58,7 +53,7 @@ def _dimension_strength(name: str) -> int:
     strong = {"empresa", "contratada", "fornecedor", "contrato", "diretoria", "gerencia", "gestor",
               "status", "vigencia", "funcao", "regiao", "unidade", "departamento", "categoria"}
     weak = {"coluna", "campo", "auxiliar", "observacao", "sequencia", "ordem", "linha", "indice", "flag"}
-    if tokens & weak or re.fullmatch(r"(?:coluna|campo)?\s*\d+", _norm(name).strip()):
+    if tokens & weak or re.fullmatch(r"(?:coluna|campo)?\s*\d+", fold(name).strip()):
         return 0
     if tokens & strong:
         return 3
@@ -144,7 +139,7 @@ def _relevance_score(kind: str, dimensions, measures, dates, confidence: str,
 def _semantic_key(item: Insight) -> tuple:
     """Ignore source sheet and generated ID so equivalent analyses collapse across tables."""
     def refs(values):
-        return tuple(sorted(_norm(value.get("column", "")) for value in values))
+        return tuple(sorted(fold(value.get("column", "")) for value in values))
     return item.type, refs(item.dimensions), refs(item.measures), refs(item.dates)
 
 
@@ -179,10 +174,10 @@ def _deduplicate_kpis(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in items:
         calculation = item.get("calculation_candidate") or {}
         if calculation:
-            key = ("calculation", _norm(calculation.get("numerator", "")),
-                   _norm(calculation.get("denominator", "")))
+            key = ("calculation", fold(calculation.get("numerator", "")),
+                   fold(calculation.get("denominator", "")))
         else:
-            key = ("measure", _norm(item.get("name", "")))
+            key = ("measure", fold(item.get("name", "")))
         current = best.get(key)
         if current is None or (item.get("relevance_score", 0), item.get("confidence") == "high") > \
                 (current.get("relevance_score", 0), current.get("confidence") == "high"):
@@ -192,7 +187,7 @@ def _deduplicate_kpis(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _slug(*values: str) -> str:
-    normalized = _norm("-".join(values))
+    normalized = fold("-".join(values))
     return re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")[:100] or "insight"
 
 
@@ -209,7 +204,7 @@ def _insight(kind: str, title: str, question: str, *, dimensions=(), measures=()
 
 
 def _business_question(dimension_name: str, measure_name: str) -> tuple[str, str, str]:
-    normalized = _norm(dimension_name)
+    normalized = fold(dimension_name)
     measure = measure_name.casefold()
     if "contratada" in normalized:
         return "ranking", "barras horizontais", f"Quais contratadas apresentam maior {measure}?"
@@ -221,7 +216,7 @@ def _business_question(dimension_name: str, measure_name: str) -> tuple[str, str
         if singular in normalized:
             if singular == "empresa":
                 parts = dimension_name.split(maxsplit=1)
-                suffix = parts[1].strip() if len(parts) > 1 and _norm(parts[0]) == "empresa" else ""
+                suffix = parts[1].strip() if len(parts) > 1 and fold(parts[0]) == "empresa" else ""
                 entity = "empresas" + (f" {suffix}" if suffix else "")
                 return "comparison", "barras/colunas", f"Quais {entity} concentram maior {measure}?"
             return "comparison", "barras/colunas", f"Quais {plural} concentram maior {measure}?"
@@ -255,7 +250,7 @@ def _quality_warnings(fields, analysis: FileAnalysis | None) -> list[str]:
 def _calculation_candidates(model: SemanticModel) -> list[CalculationCandidate]:
     candidates: list[CalculationCandidate] = []
     for table in model.tables:
-        named = {_norm(field.name): field for field in table.measures}
+        named = {fold(field.name): field for field in table.measures}
         covered = next((field for key, field in named.items() if "cobert" in key and "descobert" not in key), None)
         uncovered = next((field for key, field in named.items() if "descobert" in key), None)
         total = next((field for key, field in named.items() if "total" in key and "risco" in key), None)
@@ -379,7 +374,7 @@ def discover_insights(model: SemanticModel, quality_score: float = 100,
                 confidence = _confidence(date.confidence, measure.confidence)
                 title = f"Evolução de {measure.name} por {date.name}"
                 warning_list = []
-                normalized_date_name = _norm(date.name)
+                normalized_date_name = fold(date.name)
                 if any(word in normalized_date_name for word in ("inicio", "fim", "admissao", "vencimento", "vigencia")):
                     warning_list.append("Confirme se a data de vigência representa o evento temporal que se deseja acompanhar.")
                 warning_list.extend(_quality_warnings([date, measure], analysis))

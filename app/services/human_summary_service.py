@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
 
+from app.core.text import fold
 from app.models.analysis_models import FileAnalysis
 from app.models.discovery_models import (
     DashboardBlueprint,
@@ -49,13 +49,10 @@ PRIORITY_TEXT = {
 }
 
 
-def _norm(value: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", str(value).casefold())
-    return "".join(char for char in decomposed if not unicodedata.combining(char))
 
 
 def _warning_text(message: str) -> str:
-    normalized = _norm(message)
+    normalized = fold(message)
     if "date field confidence low" in normalized or "data suficientemente confiavel" in normalized:
         return "Não foi identificada uma coluna de data suficientemente confiável para algumas análises de evolução."
     if "type mismatch" in normalized or "inconsistent type" in normalized:
@@ -102,7 +99,7 @@ def _attention_points(analysis: FileAnalysis, semantic: SemanticModel, insights:
     security_has_events = bool(security and (security.active_content_detected or security.external_relationships_detected))
     relevant_security_warnings = analysis.security_warnings if security_has_events else []
     for message in [*analysis.warnings, *relevant_security_warnings, *semantic.semantic_warnings, *insights.warnings]:
-        normalized = _norm(message)
+        normalized = fold(message)
         severity = "critical" if any(word in normalized for word in ("falha critica", "critical failure")) else "attention"
         if "conteudo potencialmente ativo" in normalized or "external" in normalized or "externa" in normalized:
             severity = "information"
