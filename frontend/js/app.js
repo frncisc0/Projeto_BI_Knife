@@ -228,16 +228,22 @@ function chooseHeader(filename) {
 }
 
 async function resolveAmbiguousHeaders(batch, options, files) {
+  // Ask about every ambiguous file first, then analyse the WHOLE batch again with
+  // one header choice per file. Re-analysing a single file alone would drop the
+  // relationships between files (e.g. vendas.cliente_id -> clientes.cliente_id).
+  const modes = batch.results.map(() => 'auto');
+  let changed = false;
   for (let index = 0; index < batch.results.length; index += 1) {
     const item = batch.results[index];
     if (!item.analysis || !item.analysis.warnings.some(warning => warning.includes('é ambígua'))) continue;
     const choice = await chooseHeader(item.filename);
     if (choice === null) continue;
-    const file = files[index];
-    const corrected = await submitBatchWithProgress([file], { ...options, header_mode: choice });
-    if (corrected.results[0]?.analysis) item.analysis = corrected.results[0].analysis;
-    else item.error = corrected.results[0]?.error || 'Não foi possível reanalisar com a escolha informada.';
+    modes[index] = choice;
+    changed = true;
   }
+  if (!changed) return;
+  const corrected = await submitBatchWithProgress(files, { ...options, header_modes: JSON.stringify(modes) });
+  Object.assign(batch, corrected);
 }
 
 function showStatus(message, type = '') {
