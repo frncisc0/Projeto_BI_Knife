@@ -53,9 +53,12 @@ def test_sensitivity_requires_identifier_context_and_ignores_numeric_measures():
         "CPF": "cpf", "CNPJ": "cnpj", "Telefone": "telefone", "Email": "email",
         "RG": "rg", "Documento": "documento", "Celular": "telefone",
     }
-    for name in ("Data", "Pontos", "Rank", "Previous Points", "Valor", "FGTS", "Custo Folha", "Salário"):
+    for name in ("Data", "Pontos", "Rank", "Previous Points", "Valor", "FGTS", "Custo Folha"):
         assert not columns[name].sensitive, name
         assert columns[name].sensitivity_confidence == "low"
+    # v3.0.1: an individual salary column is personal data (SECURITY.md); an aggregate
+    # payroll cost ("Custo Folha") is not.
+    assert columns["Salário"].sensitive and columns["Salário"].sensitivity_category == "remuneração"
 
 
 def test_numeric_text_reports_physical_type_and_conservative_semantic_role():

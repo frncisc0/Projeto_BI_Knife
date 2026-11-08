@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.0.1 — 2026-11-08
+
+Versão de correção baseada na auditoria técnica (`docs/01_DIAGNOSTICO_TECNICO.md`). Cada defeito tem teste de regressão em `tests/unit/test_v301_regressions.py`.
+
+### Corrigido
+- **Datas ISO** (`2024-01-10`) tinham dia e mês trocados quando o dia era ≤ 12. A conversão agora fica centralizada em `app/analyzers/date_parsing.py`.
+- **Datas `dd/mm/aaaa`** eram classificadas como número (`10/01/2024` → `10012024`).
+- **Códigos alfanuméricos** (`P12`, `AB-1001`) eram tratados como número.
+- **Milhar brasileiro**: `R$ 1.234` era lido como 1,234 e `1.234.567` como inválido.
+- **Dados sensíveis**: nome de pessoa, salário, dados bancários, nascimento, endereço e mais documentos passam a ter as estatísticas suprimidas, como o SECURITY.md já prometia.
+- **Amostragem de CSV**: era feita pelas primeiras linhas (com viés) e rotulada como `none`. Agora é aleatória e uniforme (semente fixa), rotulada `uniform_random`.
+- **Servidor travado**: `/api/analyze` e `/api/analyze-batch` agora processam fora do event loop.
+
+### Segurança
+- Só são aceitos cabeçalhos Host locais (`TrustedHostMiddleware`, configurável por `BI_ALLOWED_HOSTS`).
+
+### Alterado (intencional)
+- Colunas `nome` e `salario` deixam de ter estatísticas no relatório. Antes um teste afirmava o contrário, em conflito com o SECURITY.md.
+- A amostragem uniforme de CSV grande custa uma leitura adicional do arquivo (1 milhão de linhas: ~8 s → ~14 s). Isso será eliminado na v3.3.0 (engine DuckDB).
+
+### Documentação
+- README com instruções de execução e testes.
+- Auditoria, PRD, arquitetura, roadmap por versões e Master Plan (`docs/01`–`docs/14`, `BI_KNIFE_MASTER_PLAN.md`).
+- `requirements-dev.txt` separando as dependências de teste.
+
 ## 3.0.0 — 2026-10-06
 
 - Nova camada Human-Centered BI no mesmo payload, derivada do AnalysisResult e dos blocos de descoberta já calculados.

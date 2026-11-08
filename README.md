@@ -12,6 +12,36 @@ O projeto foi desenvolvido com foco em **processamento local, privacidade e segu
 
 ---
 
+## ⚙️ Como executar
+
+Requisitos: Windows 10/11 (ou Linux/macOS) e **Python 3.11+**.
+
+```powershell
+# na pasta do projeto (PowerShell)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Abra **http://127.0.0.1:8000** no navegador.
+
+> ⚠️ Use sempre `--host 127.0.0.1`. A API não tem autenticação e não deve ficar acessível na rede.
+
+### Testes
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+node --test tests/frontend/report_names.test.mjs
+```
+
+### Documentação do projeto
+
+Visão do produto, arquitetura, roadmap por versões e auditoria técnica: **[BI_KNIFE_MASTER_PLAN.md](BI_KNIFE_MASTER_PLAN.md)**.
+
+---
+
 ## 🎯 Objetivo
 
 Muitas vezes, antes de criar um dashboard ou iniciar uma análise, é necessário descobrir:

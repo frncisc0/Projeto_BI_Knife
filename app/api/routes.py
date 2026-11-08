@@ -5,6 +5,7 @@ import logging
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError, FileValidationError
@@ -100,8 +101,10 @@ async def analyze(
         content = b"".join(chunks)
         chunks.clear()
         filename, file_type, encoding, security = validate_upload_detailed(upload.filename, content)
-        return report_payload(analyze_file(filename, file_type, content, encoding, csv_delimiter,
-                                           decimal_separator, header_mode, security_metadata=security))
+        # CPU-bound work runs in a worker thread so the event loop stays responsive.
+        analysis = await run_in_threadpool(analyze_file, filename, file_type, content, encoding, csv_delimiter,
+                                           decimal_separator, header_mode, security_metadata=security)
+        return await run_in_threadpool(report_payload, analysis)
     except FileValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except AnalysisError as exc:
@@ -227,13 +230,14 @@ async def _analyze_batch_impl(
                         progress_callback({**event, "current_file": upload_index + 1,
                                            "total_files": len(uploads), "filename": filename,
                                            "file_type": file_type})
-                analysis = analyze_file(filename or safe_name, file_type, content, encoding,
+                analysis = await run_in_threadpool(analyze_file, filename or safe_name, file_type, content, encoding,
                                         csv_delimiter, decimal_separator, header_mode,
                                         relationship_frames=relationship_frames,
                                         relationship_budget=file_relationship_budget,
                                         relationship_prefix=f"{upload_index}:{filename or safe_name}",
                                         security_metadata=security, progress_callback=report_progress)
-                results.append({"filename": filename or safe_name, "analysis": report_payload(analysis), "error": None})
+                payload = await run_in_threadpool(report_payload, analysis)
+                results.append({"filename": filename or safe_name, "analysis": payload, "error": None})
             except FileValidationError as exc:
                 results.append({"filename": filename, "analysis": None, "error": str(exc)})
                 if "limite total" in str(exc):

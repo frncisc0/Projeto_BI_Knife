@@ -1,4 +1,6 @@
 import pandas as pd
+
+from app.analyzers.date_parsing import parse_dates
 from app.core.config import get_settings
 from app.models.analysis_models import Anomaly
 from app.analyzers.statistics_analyzer import numeric_values
@@ -14,7 +16,7 @@ def invalid_date_count(series: pd.Series, inferred_type: str) -> int:
     values = series.dropna()
     if values.empty:
         return 0
-    return int(pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=True).isna().sum())
+    return int(parse_dates(values).isna().sum())
 
 
 def inconsistent_value_count(series: pd.Series, inferred_type: str) -> int:

@@ -2,19 +2,48 @@ import math
 from typing import Any
 
 import pandas as pd
+
+from app.analyzers.date_parsing import parse_dates
 from app.core.config import get_settings
 
 
+# A cell is numeric only when, apart from an optional currency symbol, sign,
+# percent sign and accounting parentheses, it contains digits and separators.
+# Letters or other punctuation (P12, AB-1001, 10/01/2024, 12345-6) mean the
+# value is a code or a date, never a number.
+_NUMERIC_PATTERN = (
+    r"\(?\s*[-+]?\s*(?:R\$|US\$|\$|€|£)?\s*[-+]?\s*"
+    r"(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d+)?\s*%?\s*\)?"
+)
+_BR_THOUSANDS_ONLY = r"[-+]?\d{1,3}(?:\.\d{3})+"
+
+
 def numeric_values(series: pd.Series) -> pd.Series:
-    text = series.astype(str).str.strip().str.replace(r"[^\d,.-]", "", regex=True)
+    raw = series.astype(str).str.strip()
+    valid = raw.str.fullmatch(_NUMERIC_PATTERN, case=False)
+    text = raw.str.replace(r"[^\d,.-]", "", regex=True)
+    text = text.where(valid.fillna(False), "")
     both_separators = text.str.contains(",", regex=False) & text.str.contains(".", regex=False)
     comma_is_decimal = both_separators & (text.str.rfind(",") > text.str.rfind("."))
+    # Column-level locale evidence: Brazilian currency, decimal comma or a
+    # repeated dot ("1.234.567") mean dots in this column are thousands.
+    brazilian = bool(
+        raw.str.contains("R$", regex=False).any()
+        or comma_is_decimal.any()
+        or text.str.fullmatch(r"[-+]?\d+,\d{1,2}").any()
+        or text.str.count(r"\.").gt(1).any()
+    )
     text.loc[comma_is_decimal] = text.loc[comma_is_decimal].str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
     comma_is_thousands = both_separators & ~comma_is_decimal
     text.loc[comma_is_thousands] = text.loc[comma_is_thousands].str.replace(",", "", regex=False)
     only_comma = text.str.contains(",", regex=False) & ~both_separators
     text.loc[only_comma] = text.loc[only_comma].str.replace(",", ".", regex=False)
-    return pd.to_numeric(text, errors="coerce")
+    if brazilian:
+        thousands_only = text.str.fullmatch(_BR_THOUSANDS_ONLY) & ~both_separators & ~only_comma
+        text.loc[thousands_only] = text.loc[thousands_only].str.replace(".", "", regex=False)
+    negative_parentheses = raw.str.match(r"^\(.*\)$") & valid.fillna(False)
+    numbers = pd.to_numeric(text.replace("", None), errors="coerce")
+    return numbers.where(~negative_parentheses, -numbers.abs())
 
 
 def _clean(value: Any) -> Any:
@@ -45,7 +74,7 @@ def statistics(series: pd.Series, inferred_type: str) -> dict[str, Any]:
             result[f"p{bounded:g}"] = _clean(numeric.quantile(bounded / 100))
         return result
     if "data" in inferred_type and not values.empty:
-        dates = pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=True).dropna()
+        dates = parse_dates(values).dropna()
         if not dates.empty:
             years = dates.dt.year.value_counts().sort_index()
             months = dates.dt.to_period("M").value_counts().sort_index()
