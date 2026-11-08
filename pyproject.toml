@@ -1,6 +1,6 @@
 [project]
 name = "bi-knife"
-version = "3.0.2"
+version = "3.0.3"
 description = "Diagnóstico local de arquivos Excel e CSV para projetos de Business Intelligence."
 readme = "README.md"
 requires-python = ">=3.11"
