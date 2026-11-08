@@ -26,8 +26,11 @@ def test_sensitive_cell_values_do_not_appear_in_analysis_report():
     assert "preview" not in serialized
     columns = {column.name: column for column in report.tables[0].column_analyses}
     assert all(columns[name].sensitive for name in ("cpf", "email", "telefone"))
-    assert not columns["nome"].sensitive and not columns["salario"].sensitive
-    assert all(not columns[name].statistics.model_dump(exclude_none=True) for name in ("cpf", "email", "telefone"))
+    # v3.0.1: person names and individual salaries are personal data, as SECURITY.md states.
+    assert columns["nome"].sensitive and columns["salario"].sensitive
+    assert all(not columns[name].statistics.model_dump(exclude_none=True)
+               for name in ("cpf", "email", "telefone", "nome", "salario"))
+    assert secrets[-1] not in serialized
 
 
 def test_ambiguous_header_defaults_to_generic_names_and_masks_detected_pii():

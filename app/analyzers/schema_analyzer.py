@@ -2,6 +2,8 @@ import re
 import unicodedata
 
 import pandas as pd
+
+from app.analyzers.date_parsing import parse_dates
 from app.analyzers.statistics_analyzer import numeric_values
 
 
@@ -17,9 +19,25 @@ CATEGORY_TERMS = {
     "department", "departamento", "area", "fornecedor", "supplier", "manager", "company",
 }
 SENSITIVE_NAME_CATEGORIES = {
-    "cpf": {"cpf"}, "cnpj": {"cnpj"}, "telefone": {"telefone", "celular", "phone", "mobile"},
-    "email": {"email", "mail"}, "rg": {"rg"}, "documento": {"documento", "document", "national_id", "ssn"},
+    "cpf": {"cpf"}, "cnpj": {"cnpj"}, "telefone": {"telefone", "celular", "phone", "mobile", "whatsapp"},
+    "email": {"email", "mail"}, "rg": {"rg"}, "documento": {"documento", "document", "national_id", "ssn",
+                                                         "cnh", "passaporte", "passport", "pis", "nis"},
+    "remuneração": {"salario", "salary", "salarios", "remuneracao", "proventos", "vencimentos", "wage", "wages"},
+    "dados bancários": {"agencia", "pix", "iban", "swift", "cartao", "card"},
+    "nascimento": {"nascimento", "birth", "birthday", "birthdate", "dob"},
+    "endereço": {"endereco", "address", "logradouro"},
 }
+# Ambiguous terms are personal only together with a personal context:
+# "nome" alone or "nome_cliente" is personal; "nome_produto" is not.
+_PERSONAL_CONTEXT = {"cliente", "customer", "completo", "full", "colaborador", "funcionario", "employee",
+                     "pessoa", "person", "usuario", "user", "contato", "contact", "responsavel", "mae", "pai",
+                     "titular", "paciente", "aluno", "candidato", "beneficiario", "social", "solicitante",
+                     "fornecedor_pf", "dependente", "conjuge", "segurado", "motorista", "vendedor", "gestor"}
+_AMBIGUOUS_PERSONAL_TERMS = {
+    "nome": ({"nome", "name", "first", "last", "sobrenome", "surname"}, "nome"),
+    "conta": ({"conta", "account"}, "dados bancários"),
+}
+_BANK_CONTEXT = {"bancaria", "bancario", "banco", "bank", "corrente", "poupanca", "deposito", "checking", "savings"}
 
 
 def sensitivity_details(column_name: str, series: pd.Series | None = None, physical: str | None = None,
@@ -31,6 +49,12 @@ def sensitivity_details(column_name: str, series: pd.Series | None = None, physi
     for category, terms in SENSITIVE_NAME_CATEGORIES.items():
         if tokens & terms:
             return f"O nome da coluna identifica diretamente um dado pessoal ({category}).", category, "high"
+    name_terms, name_category = _AMBIGUOUS_PERSONAL_TERMS["nome"]
+    if tokens & name_terms and (tokens <= name_terms | {"de", "do", "da"} or tokens & _PERSONAL_CONTEXT):
+        return f"O nome da coluna indica um dado pessoal ({name_category}).", name_category, "high"
+    account_terms, account_category = _AMBIGUOUS_PERSONAL_TERMS["conta"]
+    if tokens & account_terms and tokens & _BANK_CONTEXT:
+        return f"O nome da coluna indica um dado pessoal ({account_category}).", account_category, "high"
     # Content-pattern detection is limited to e-mail text. Numeric formatting alone
     # cannot distinguish phone/document identifiers from amounts, ranks, or scores.
     if (series is not None and physical == "string" and inferred in {"categórico", "texto"}
@@ -74,7 +98,7 @@ def infer_type(series: pd.Series, column_name: str = "") -> str:
         if _has_identifier_term(normalized_name) and numeric.nunique() / max(1, len(values)) >= 0.5:
             return "identificador"
         return "numérico (texto)"
-    parsed_dates = pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=True)
+    parsed_dates = parse_dates(values)
     if parsed_dates.notna().mean() >= 0.8:
         return "data/hora (texto)" if (parsed_dates.dt.hour != 0).any() else "data"
     if text_values.str.casefold().isin({"true", "false", "yes", "no", "sim", "não", "nao"}).mean() >= 0.8:
@@ -110,7 +134,7 @@ def type_reason(series: pd.Series, column_name: str, inferred_type: str) -> str:
         rate = numeric_values(values).notna().mean() * 100
         return f"{rate:.1f}% dos valores de texto podem ser convertidos em números."
     if "data" in inferred_type:
-        rate = pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=True).notna().mean() * 100
+        rate = parse_dates(values).notna().mean() * 100
         return f"{rate:.1f}% dos valores correspondem a datas interpretáveis."
     if inferred_type == "booleano":
         return "Os valores são booleanos ou correspondem a rótulos booleanos conhecidos."
