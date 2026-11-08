@@ -6,7 +6,6 @@ import pandas as pd
 from app.analyzers.date_parsing import parse_dates
 from app.analyzers.statistics_analyzer import numeric_values
 
-
 IDENTIFIER_TERMS = ("id", "codigo", "código", "chave", "contrato", "numero", "número", "cpf", "cnpj", "pedido", "processo")
 SEMANTIC_IDENTIFIER_TERMS = {"id", "codigo", "cod", "chave", "contrato", "cpf", "cnpj", "pedido", "sku", "registro", "matricula"}
 MEASURE_TERMS = {
@@ -158,13 +157,13 @@ def physical_type(series: pd.Series) -> str:
     # CSV cells are retained as text to avoid pandas stripping leading zeros.
     # Still report their apparent physical numeric type when every populated
     # value is safely numeric and has no zero-padded integer representation.
-    if pd.api.types.is_string_dtype(dtype) or dtype == object:
+    if pd.api.types.is_string_dtype(dtype) or pd.api.types.is_object_dtype(dtype):
         values = series.dropna().astype(str).str.strip()
         if not values.empty and values.str.fullmatch(r"[+-]?(?:0|[1-9]\d*)").all():
             return "integer"
         if not values.empty and not values.str.match(r"[+-]?0\d+").any() and numeric_values(values).notna().all():
             return "number"
-    if pd.api.types.is_string_dtype(dtype) or dtype == object:
+    if pd.api.types.is_string_dtype(dtype) or pd.api.types.is_object_dtype(dtype):
         return "string"
     return "unknown"
 

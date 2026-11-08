@@ -6,8 +6,13 @@ import unicodedata
 from typing import Any
 
 from app.models.analysis_models import FileAnalysis
-from app.models.discovery_models import DashboardBlueprint, HumanCenteredSummary, InsightsBlock, KpisBlock, SemanticModel
-
+from app.models.discovery_models import (
+    DashboardBlueprint,
+    HumanCenteredSummary,
+    InsightsBlock,
+    KpisBlock,
+    SemanticModel,
+)
 
 QUALITY_TEXT = {
     "Excelente": "Os dados apresentam qualidade excelente segundo as verificações realizadas.",

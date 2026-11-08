@@ -1,7 +1,7 @@
+from app.services.analysis_service import analyze_file
 from app.services.html_report_service import render_html_report
 from app.services.pdf_report_service import render_pdf_report
 from app.services.report_service import report_payload
-from app.services.analysis_service import analyze_file
 
 
 def _batch():
@@ -79,8 +79,8 @@ def test_html_explains_composite_keys_relationships_sampling_and_security_counts
 
 
 def test_report_api_and_frontend_use_existing_payload_without_reanalysis(monkeypatch):
-    from app.api.routes import export_html_report, export_pdf_report
     from app.api import routes
+    from app.api.routes import export_html_report, export_pdf_report
 
     batch = _batch()
     def fail_if_reanalyzed(*_args, **_kwargs):
@@ -100,6 +100,7 @@ def test_report_api_and_frontend_use_existing_payload_without_reanalysis(monkeyp
 def test_pdf_api_names_missing_reportlab_dependency(monkeypatch):
     import pytest
     from fastapi import HTTPException
+
     from app.api import routes
 
     def missing_reportlab(_payload):

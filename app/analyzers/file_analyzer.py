@@ -1,9 +1,10 @@
 import csv
-from io import BytesIO, StringIO
 import random
 import re
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from io import BytesIO, StringIO
+from typing import Any
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -11,7 +12,6 @@ from openpyxl import load_workbook
 from app.analyzers.statistics_analyzer import numeric_values
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError, FileValidationError
-
 
 _HEADER_TERMS = {
     "id", "key", "chave", "code", "cod", "codigo", "código", "name", "nome", "email", "e-mail",
@@ -52,10 +52,10 @@ def _guess_header(text: str, delimiter: str) -> tuple[bool, bool]:
     def numeric(value: str) -> bool:
         return bool(numeric_values(pd.Series([value])).notna().iloc[0])
     third = next(reader, [])
-    transitions = sum(not numeric(left) and numeric(right) for left, right in zip(first, second))
+    transitions = sum(not numeric(left) and numeric(right) for left, right in zip(first, second, strict=False))
     if len(third) == len(first):
         stable_data_types = sum(numeric(second_value) == numeric(third_value)
-                                for second_value, third_value in zip(second, third))
+                                for second_value, third_value in zip(second, third, strict=False))
     else:
         stable_data_types = 0
     def field_name_signal(value: str) -> bool:

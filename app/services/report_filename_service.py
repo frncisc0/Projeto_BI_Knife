@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import PureWindowsPath
 from typing import Any
 
-
 _INVALID_WINDOWS_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _RESERVED_WINDOWS_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
                            *(f"LPT{i}" for i in range(1, 10))}

@@ -42,7 +42,14 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        KeepTogether, LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+        KeepTogether,
+        LongTable,
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
     )
 
     green = colors.HexColor("#176B3D")
@@ -87,9 +94,6 @@ def render_pdf_report(batch: dict[str, Any]) -> bytes:
                                 f"Tempo: {_safe(_duration(report.get('processing_time_ms', 0)))} &nbsp; | &nbsp; "
                                 f"Status: {_safe(_status(report.get('status')))}", styles["SmallText"])])
     severity_labels = {"critical": "Problema crítico", "attention": "Atenção", "information": "Informação"}
-    type_labels = {"ranking": "Ranking", "comparison": "Comparação", "trend": "Evolução",
-                   "kpi": "Indicador", "coverage": "Indicador derivado", "distribution": "Distribuição",
-                   "outlier": "Ponto fora do padrão", "segmentation": "Segmentação", "detail_table": "Detalhamento"}
     for filename, report in reports:
         human = report.get("human_summary") or {}
         quality = report.get("quality", {})

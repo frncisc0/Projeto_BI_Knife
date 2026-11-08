@@ -56,7 +56,7 @@ def _tokens(value: str) -> set[str]:
 def _dimension_strength(name: str) -> int:
     tokens = _tokens(name)
     strong = {"empresa", "contratada", "fornecedor", "contrato", "diretoria", "gerencia", "gestor",
-              "status", "vigencia", "funcao", "funcao", "regiao", "unidade", "departamento", "categoria"}
+              "status", "vigencia", "funcao", "regiao", "unidade", "departamento", "categoria"}
     weak = {"coluna", "campo", "auxiliar", "observacao", "sequencia", "ordem", "linha", "indice", "flag"}
     if tokens & weak or re.fullmatch(r"(?:coluna|campo)?\s*\d+", _norm(name).strip()):
         return 0
@@ -133,7 +133,7 @@ def _relevance_score(kind: str, dimensions, measures, dates, confidence: str,
 
     warning_penalty = min(12, len(warnings) * 3)
     weak_semantics = sum(4 for field in dimensions if _dimension_strength(field.name) == 0)
-    weak_semantics += sum(3 for field, strength in zip(measures, strengths)
+    weak_semantics += sum(3 for field, strength in zip(measures, strengths, strict=False)
                           if strength == 0 or _measure_strength(field.name, field.format, field.table) == 0)
     redundancy_penalty = 0  # Applied after semantic duplicate groups are ranked.
     return max(0, min(100, semantic_fit + importance + usefulness + quality + cardinality
@@ -143,7 +143,8 @@ def _relevance_score(kind: str, dimensions, measures, dates, confidence: str,
 
 def _semantic_key(item: Insight) -> tuple:
     """Ignore source sheet and generated ID so equivalent analyses collapse across tables."""
-    refs = lambda values: tuple(sorted(_norm(value.get("column", "")) for value in values))
+    def refs(values):
+        return tuple(sorted(_norm(value.get("column", "")) for value in values))
     return item.type, refs(item.dimensions), refs(item.measures), refs(item.dates)
 
 
@@ -443,7 +444,6 @@ def discover_insights(model: SemanticModel, quality_score: float = 100,
     candidate_count = len(insights)
     insights, duplicates_removed = _deduplicate(insights)
     insights = insights[:60]
-    priority_order = {"high": 0, "medium": 1, "low": 2}
     warnings = list(model.semantic_warnings)
     if not insights:
         warnings.append("Não foram encontradas combinações suficientes de dimensão, medida ou data para sugerir análises.")

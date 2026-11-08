@@ -1,0 +1,43 @@
+[project]
+name = "bi-knife"
+version = "3.0.1"
+description = "Diagnóstico local de arquivos Excel e CSV para projetos de Business Intelligence."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Francisco" }]
+
+# Runtime dependencies live in requirements.txt and development tools in
+# requirements-dev.txt (installed by CI). This file centralizes tool settings.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
+filterwarnings = [
+    # starlette.testclient warns about its own httpx dependency; not our code.
+    "ignore:Using `httpx` with `starlette.testclient`:Warning",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = false
+skip_covered = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["test-data"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle · F: pyflakes · I: import order · B: bugbear · UP: pyupgrade
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # long lines: existing code; revisit while decomposing modules (v3.1.0)
+    "B008",  # FastAPI's File(...)/Form(...)/Body(...) defaults are the intended pattern
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

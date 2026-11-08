@@ -14,8 +14,8 @@ def _analyze(name: str, content: bytes, **options):
     ("delimiter", "content"),
     [
         (",", b"id,name\n001,Ana\n002,Bia\n"),
-        (";", "id;nome\n001;João\n002;Bia\n".encode("utf-8")),
-        ("\t", "id\tnome\n001\tJoão\n002\tBia\n".encode("utf-8")),
+        (";", "id;nome\n001;João\n002;Bia\n".encode()),
+        ("\t", "id\tnome\n001\tJoão\n002\tBia\n".encode()),
     ],
 )
 def test_delimiters_and_values_reach_the_shared_analysis_pipeline(delimiter, content):
@@ -36,7 +36,7 @@ def test_utf8_bom_cp1252_and_accented_headers_are_supported():
 
 
 def test_quoted_delimiters_empty_values_and_mixed_types_are_preserved():
-    content = 'id,comment,value\n001,"vendas, varejo",10\n002,"texto com ""aspas""",\n003,texto,indefinido\n'.encode()
+    content = b'id,comment,value\n001,"vendas, varejo",10\n002,"texto com ""aspas""",\n003,texto,indefinido\n'
     report = _analyze("quoted.csv", content, csv_delimiter=",", header_mode="true")
     table = report.tables[0]
     assert table.rows == 3

@@ -80,6 +80,7 @@ def test_numeric_identifiers_are_not_labeled_as_measures():
 
 def test_numeric_semantic_hints_are_measures_even_when_headers_are_not_numeric_types():
     import pandas as pd
+
     from app.analyzers.schema_analyzer import semantic_role
 
     numeric_names = (
@@ -101,6 +102,7 @@ def test_numeric_semantic_hints_are_measures_even_when_headers_are_not_numeric_t
 
 def test_descriptive_semantic_hints_remain_categories():
     import pandas as pd
+
     from app.analyzers.schema_analyzer import semantic_role
 
     category_names = (
