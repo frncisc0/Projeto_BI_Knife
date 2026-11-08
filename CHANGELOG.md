@@ -1,14 +1,17 @@
 # Changelog
 
-## [Não lançado] — rumo à 3.1.0 (Fundação)
+## 3.0.2 — 2026-11-08
 
-### Adicionado
-- Integração contínua (GitHub Actions): lint com ruff, testes em Windows e Linux (Python 3.11 e 3.12), testes do frontend, cobertura e `pip-audit`.
-- `pyproject.toml` centralizando a configuração de pytest, cobertura e ruff.
+Correção urgente de uma regressão introduzida na 3.0.1, encontrada pelo novo conjunto-ouro de testes. Também passa a valer a integração contínua.
 
 ### Corrigido
+- **Análise interrompida por "datas" fora do intervalo:** desde a 3.0.1, uma coluna com valores como `00123` (interpretado como ano 123) fazia a análise do arquivo inteiro falhar com `OutOfBoundsDatetime`. Esses valores agora são tratados como datas inválidas (`app/analyzers/date_parsing.py`). Teste: `test_v302_out_of_range_date_candidates_do_not_crash_analysis`.
 - A exportação HTML usava sintaxe de f-string exclusiva do Python 3.12; no Python 3.11 o módulo nem carregava (8 arquivos de teste falhavam na importação).
-- Callback de progresso do lote agora fixa os valores do laço (aviso B023).
+- O callback de progresso do lote agora fixa os valores do laço (aviso B023).
+
+### Adicionado
+- Integração contínua (GitHub Actions): lint com ruff, testes em Windows e Linux (Python 3.11 e 3.12), testes do frontend, cobertura e `pip-audit`. O `master` exige esses checks para aceitar merge.
+- `pyproject.toml` centralizando a configuração de pytest, cobertura e ruff.
 
 ### Interno
 - Imports ordenados e código morto removido (variáveis nunca usadas, comparação de tipo frágil).
