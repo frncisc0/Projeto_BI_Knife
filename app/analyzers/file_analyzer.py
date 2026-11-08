@@ -348,12 +348,40 @@ def read_tables(
         finally:
             reader.close()
         row_limit = _row_limit(total_columns)
-        frame = pd.read_csv(BytesIO(content), nrows=row_limit,
-                            usecols=selected_columns, **read_options)
+        if total_rows > row_limit:
+            # Uniform random sample over the whole file (fixed seed for
+            # reproducibility). Reading only the first rows biases sorted files.
+            keep = sorted(random.Random(0).sample(range(total_rows), row_limit))
+            parts: list[pd.DataFrame] = []
+            position = 0
+            cursor = 0
+            sample_reader = pd.read_csv(BytesIO(content), chunksize=50000, usecols=selected_columns, **read_options)
+            try:
+                for chunk in sample_reader:
+                    if time.monotonic() > deadline:
+                        raise AnalysisError("A análise excedeu o tempo máximo configurado.")
+                    end = position + len(chunk)
+                    start_cursor = cursor
+                    while cursor < len(keep) and keep[cursor] < end:
+                        cursor += 1
+                    if cursor > start_cursor:
+                        parts.append(chunk.iloc[[index - position for index in keep[start_cursor:cursor]]])
+                    position = end
+                    if cursor >= len(keep):
+                        break
+            finally:
+                sample_reader.close()
+            frame = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=selected_columns)
+            sampling_method = "uniform_random"
+        else:
+            frame = pd.read_csv(BytesIO(content), nrows=row_limit,
+                                usecols=selected_columns, **read_options)
+            sampling_method = "none"
         if time.monotonic() > deadline:
             raise AnalysisError("A análise excedeu o tempo máximo configurado.")
         frame.attrs.update({"total_rows": total_rows, "rows_analyzed": len(frame),
-                            "sampled": total_rows > len(frame), "columns_total": total_columns,
+                            "sampled": total_rows > len(frame), "sampling_method": sampling_method,
+                            "columns_total": total_columns,
                             "columns_analyzed": len(frame.columns),
                             "import_settings": {"encoding": csv_encoding or "utf-8", "delimiter": delimiter,
                                                 "decimal_separator": decimal, "header": has_header,
