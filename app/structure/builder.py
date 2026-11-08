@@ -12,7 +12,6 @@ from app.models.discovery_models import (
     TableStructureProfile,
 )
 
-
 ROLE_LABELS = {
     "identifier": "possível campo de identificação",
     "code": "possível código de identificação",

@@ -1,15 +1,15 @@
-from io import BytesIO
-import zipfile
 import json
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 from openpyxl import Workbook
 
 from app.security.file_validation import validate_upload_detailed
 from app.services.analysis_service import analyze_file
-from app.services.report_service import report_payload
 from app.services.html_report_service import render_html_report
 from app.services.pdf_report_service import render_pdf_report
+from app.services.report_service import report_payload
 
 
 def test_xlsx_detects_sheets_and_relationships():

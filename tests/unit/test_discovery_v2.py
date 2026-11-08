@@ -4,6 +4,7 @@ from io import BytesIO
 from unittest.mock import patch
 
 from openpyxl import Workbook
+
 from app.models.analysis_models import RelationshipCandidate
 from app.services.analysis_service import analyze_file
 from app.services.html_report_service import render_html_report

@@ -1,9 +1,9 @@
 import csv
 import io
-import zipfile
-from xml.parsers import expat
 import xml.etree.ElementTree as ElementTree
+import zipfile
 from pathlib import PurePath
+from xml.parsers import expat
 
 from app.core.config import get_settings
 from app.core.exceptions import FileValidationError

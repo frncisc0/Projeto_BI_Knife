@@ -120,7 +120,7 @@ def test_empty_csv_is_rejected():
 
 
 def test_utf8_semicolon_csv_is_accepted():
-    name, kind, encoding = validate_upload("sales.csv", "id;valor\n1;15\n".encode("utf-8"))
+    name, kind, encoding = validate_upload("sales.csv", b"id;valor\n1;15\n")
     assert name == "sales.csv"
     assert kind == "csv"
     assert encoding.startswith("utf-8")

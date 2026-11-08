@@ -1,23 +1,23 @@
 import asyncio
 import json
-from io import BytesIO
 import logging
+from io import BytesIO
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile as StoredUploadFile
 
+from app.analyzers.relationship_analyzer import suggest_relationships
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError, FileValidationError
-from app.analyzers.relationship_analyzer import suggest_relationships
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
-from app.services.report_service import report_payload, refresh_discovery_payload
-from app.services.report_filename_service import content_disposition, report_filename
 from app.services.html_report_service import render_html_report
 from app.services.pdf_report_service import render_pdf_report
 from app.services.progress_tracker import create_analysis_job, get_analysis_job
-from starlette.datastructures import UploadFile as StoredUploadFile
+from app.services.report_filename_service import content_disposition, report_filename
+from app.services.report_service import refresh_discovery_payload, report_payload
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -225,7 +225,9 @@ async def _analyze_batch_impl(
                                        "total_files": len(uploads), "filename": filename,
                                        "message": "Verificando a segurança do arquivo"})
                 safe_name, file_type, encoding, security = validate_upload_detailed(upload.filename, content)
-                def report_progress(event: dict) -> None:
+                # Bind the loop values explicitly: the callback must report the file being analyzed now.
+                def report_progress(event: dict, upload_index: int = upload_index, filename: str = filename,
+                                    file_type: str = file_type) -> None:
                     if progress_callback:
                         progress_callback({**event, "current_file": upload_index + 1,
                                            "total_files": len(uploads), "filename": filename,

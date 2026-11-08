@@ -1,8 +1,9 @@
-from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
 import uuid
-from typing import Any, Callable
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 
 class ProgressTracker:

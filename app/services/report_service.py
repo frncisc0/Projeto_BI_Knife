@@ -1,11 +1,11 @@
 import json
 
+from app.blueprint.builder import build_dashboard_blueprint
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError
+from app.insights.engine import discover_insights
 from app.models.analysis_models import FileAnalysis
 from app.semantic.builder import build_semantic_model
-from app.insights.engine import discover_insights
-from app.blueprint.builder import build_dashboard_blueprint
 from app.services.human_summary_service import build_human_summary, finalize_dashboard_summary
 from app.structure.builder import build_table_structure_profiles
 

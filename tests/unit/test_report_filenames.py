@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.services.report_filename_service import content_disposition, report_filename
 
-
-STAMP = datetime(2026, 10, 14, 22, 51, 29, tzinfo=timezone.utc)
+STAMP = datetime(2026, 10, 14, 22, 51, 29, tzinfo=UTC)
 
 
 def test_csv_and_xlsx_report_names_keep_source_stem_and_report_extension():

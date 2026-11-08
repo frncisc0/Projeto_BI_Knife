@@ -1,6 +1,6 @@
 import asyncio
-from io import BytesIO
 import time
+from io import BytesIO
 
 from openpyxl import Workbook
 from starlette.datastructures import UploadFile

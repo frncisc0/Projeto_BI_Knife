@@ -42,7 +42,7 @@ def test_relationship_suggestion_uses_unique_target_and_value_coverage():
 
 
 def test_csv_options_handle_decimal_comma_and_headerless_files():
-    report = analyze_file("european.csv", "csv", "item;valor\nA;1.234,50\n".encode(), "utf-8", header_mode="true")
+    report = analyze_file("european.csv", "csv", b"item;valor\nA;1.234,50\n", "utf-8", header_mode="true")
     amount = report.tables[0].column_analyses[1]
     assert amount.inferred_type == "moeda"
     assert amount.statistics.mean == 1234.5
@@ -77,6 +77,7 @@ def test_composite_key_candidate_is_suggested():
 
 def test_matching_rank_columns_do_not_create_a_relationship():
     import pandas as pd
+
     from app.analyzers.relationship_analyzer import suggest_relationships
 
     frames = {

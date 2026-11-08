@@ -56,7 +56,7 @@ class ColumnAnalysis(BaseModel):
     statistics: StatisticsAnalysis = Field(default_factory=StatisticsAnalysis)
     top_values: list[dict[str, Any]] = Field(default_factory=list)  # Frequencies only; never contains cell values.
     null_classification: str
-    anomalies: list["Anomaly"] = Field(default_factory=list)
+    anomalies: list[Anomaly] = Field(default_factory=list)
 
 
 class Anomaly(BaseModel):

@@ -1,10 +1,11 @@
-from datetime import datetime
-from hashlib import sha256
 import re
 import time
 import unicodedata
 import uuid
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import datetime
+from hashlib import sha256
+from typing import Any
 
 import pandas as pd
 
@@ -17,13 +18,27 @@ from app.analyzers.quality_analyzer import (
     numeric_anomalies,
 )
 from app.analyzers.relationship_analyzer import suggest_relationships
-from app.analyzers.schema_analyzer import infer_type, physical_type, sensitivity_details, semantic_role, type_confidence, type_reason
+from app.analyzers.schema_analyzer import (
+    infer_type,
+    physical_type,
+    semantic_role,
+    sensitivity_details,
+    type_confidence,
+    type_reason,
+)
 from app.analyzers.statistics_analyzer import statistics
 from app.core.config import get_settings
 from app.core.exceptions import AnalysisError
-from app.models.analysis_models import Anomaly, AnalysisReport, ColumnAnalysis, FileSecurityAnalysis, QualityAnalysis, StatisticsAnalysis, TableAnalysis
+from app.models.analysis_models import (
+    AnalysisReport,
+    Anomaly,
+    ColumnAnalysis,
+    FileSecurityAnalysis,
+    QualityAnalysis,
+    StatisticsAnalysis,
+    TableAnalysis,
+)
 from app.security.file_validation import inspect_xlsx_package
-
 
 KEY_NAME_TERMS = ("id", "codigo", "chave", "contrato", "numero", "matricula", "registro", "sku", "pedido", "processo")
 

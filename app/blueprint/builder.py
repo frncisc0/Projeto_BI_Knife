@@ -4,8 +4,13 @@ import re
 import unicodedata
 from collections import defaultdict
 
-from app.models.discovery_models import DashboardBlueprint, HumanCenteredSummary, InsightsBlock, KpisBlock, SemanticModel
-
+from app.models.discovery_models import (
+    DashboardBlueprint,
+    HumanCenteredSummary,
+    InsightsBlock,
+    KpisBlock,
+    SemanticModel,
+)
 
 _DOMAIN_LABELS = {
     "trabalhista": "relações trabalhistas",

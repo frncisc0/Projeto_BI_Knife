@@ -1,9 +1,9 @@
 import pandas as pd
 
 from app.analyzers.date_parsing import parse_dates
+from app.analyzers.statistics_analyzer import numeric_values
 from app.core.config import get_settings
 from app.models.analysis_models import Anomaly
-from app.analyzers.statistics_analyzer import numeric_values
 
 
 def duplicate_row_count(frame: pd.DataFrame) -> int:

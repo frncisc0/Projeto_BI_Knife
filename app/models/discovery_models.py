@@ -4,7 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 Confidence = Literal["low", "medium", "high"]
 
 

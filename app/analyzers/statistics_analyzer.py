@@ -6,7 +6,6 @@ import pandas as pd
 from app.analyzers.date_parsing import parse_dates
 from app.core.config import get_settings
 
-
 # A cell is numeric only when, apart from an optional currency symbol, sign,
 # percent sign and accounting parentheses, it contains digits and separators.
 # Letters or other punctuation (P12, AB-1001, 10/01/2024, 12345-6) mean the

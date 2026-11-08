@@ -6,7 +6,6 @@ import pandas as pd
 from app.core.config import get_settings
 from app.models.analysis_models import RelationshipCandidate, TableAnalysis
 
-
 NON_RELATIONAL_TERMS = {
     "rank", "ranking", "score", "points", "point", "pontos", "nota", "valor", "value", "amount",
     "custo", "cost", "risco", "risk", "total", "average", "avg", "media", "média", "quantity",
