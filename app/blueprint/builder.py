@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from collections import defaultdict
 
+from app.core.text import fold
 from app.models.discovery_models import (
     DashboardBlueprint,
     HumanCenteredSummary,
@@ -21,8 +21,8 @@ _DOMAIN_LABELS = {
 
 
 def _norm(value: str) -> str:
-    text = unicodedata.normalize("NFKD", str(value).casefold())
-    text = "".join(char for char in text if not unicodedata.combining(char))
+    """Folded text with punctuation collapsed to single spaces."""
+    text = fold(value)
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
