@@ -2,6 +2,12 @@
 
 ## [Não lançado] — rumo à 3.1.0 (Fundação)
 
+### Adicionado
+- **Exportar Markdown** (botão na tela de resultados e `POST /api/report-markdown`): um dossiê da estrutura dos dados pronto para colar em uma IA (ChatGPT, Claude, Gemini, Copilot) e pedir ajuda para montar o dashboard. Inclui instruções para a IA, tabelas e colunas (tipo, papel, % preenchido, cardinalidade, chaves), relacionamentos com % de correspondência, problemas de qualidade, modelo semântico, KPIs, perguntas e páginas sugeridas. **Não contém valores de células, nomes de categorias, exemplos nem estatísticas dos valores**; colunas pessoais aparecem marcadas com 🔒. Com cerca de 2 mil tokens para dois arquivos, ocupa uma fração do JSON (~28 mil).
+
+### Corrigido
+- **Relacionamentos entre arquivos sumiam depois do diálogo de cabeçalho:** ao responder "a primeira linha é cabeçalho", a interface reanalisava só aquele arquivo, isolado. Agora reanalisa o lote inteiro com uma escolha por arquivo (`header_modes`), mantendo relações como `clientes.cliente_id → vendas.cliente_id`.
+
 ### Interno
 - `analyze_file` decomposta de 293 para 60 linhas: orquestrador de etapas com responsabilidade única. Chaves, score de qualidade e classificação de tabela foram para módulos próprios (`app/analyzers/keys.py`, `quality_score.py`, `table_kind.py`). Os snapshots de caracterização permaneceram idênticos.
 - Normalização de texto centralizada em `app/core/text.py` (3 cópias idênticas removidas); a regra de classificação da qualidade deixou de ser repetida em `routes.py`.

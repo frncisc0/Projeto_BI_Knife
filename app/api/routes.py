@@ -15,6 +15,7 @@ from app.core.exceptions import AnalysisError, FileValidationError
 from app.security.file_validation import display_filename, validate_upload_detailed
 from app.services.analysis_service import analyze_file
 from app.services.html_report_service import render_html_report
+from app.services.markdown_report_service import render_markdown_report
 from app.services.pdf_report_service import render_pdf_report
 from app.services.progress_tracker import create_analysis_job, get_analysis_job
 from app.services.report_filename_service import content_disposition, report_filename
@@ -43,6 +44,16 @@ def export_html_report(payload: dict = Body(...)) -> Response:
     content = render_html_report(payload)
     return Response(content=content, media_type="text/html; charset=utf-8",
                     headers={"Content-Disposition": content_disposition(report_filename(payload, "html")),
+                             "Cache-Control": "no-store"})
+
+
+@router.post("/report-markdown")
+def export_markdown_report(payload: dict = Body(...)) -> Response:
+    """Structure-only Markdown (no data values) to paste into an AI assistant."""
+    _validate_report_payload(payload)
+    content = render_markdown_report(payload)
+    return Response(content=content.encode("utf-8"), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": content_disposition(report_filename(payload, "md")),
                              "Cache-Control": "no-store"})
 
 
