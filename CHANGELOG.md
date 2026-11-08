@@ -1,5 +1,12 @@
 # Changelog
 
+## [Não lançado] — rumo à 3.1.0 (Fundação)
+
+### Adicionado
+- **Conjunto-ouro** (`tests/golden`): 12 arquivos pequenos com valores esperados calculados à mão (CSV padrão Excel BR em cp1252, CSV internacional, datas ISO, moeda BR, códigos, RH com dados sensíveis, duplicados e nulos, XLSX com título e várias abas, modelo estrela entre CSVs). Funcionalidades ainda inexistentes ficam marcadas como `xfail` com a versão prevista.
+- **Testes de caracterização** (`tests/characterization`): snapshot do relatório completo de cada arquivo do conjunto-ouro, para garantir que a refatoração da v3.1.0 não altere resultados.
+- `.gitattributes` preservando os bytes dos arquivos de teste no Windows.
+
 ## 3.0.2 — 2026-11-08
 
 Correção urgente de uma regressão introduzida na 3.0.1, encontrada pelo novo conjunto-ouro de testes. Também passa a valer a integração contínua.

@@ -1,0 +1,596 @@
+{
+ "anomalies": [],
+ "dashboard_blueprint": {
+  "audience": "Equipe que acompanha os dados; um público de negócio mais específico não pode ser inferido com segurança.",
+  "design_rationale": [
+   "A Visão Geral reúne até cinco insights e seis KPIs priorizados.",
+   "Páginas temáticas só são criadas quando há um grupo coerente de insights ou uma análise de alta prioridade.",
+   "Filtros vêm de dimensões usadas nas análises e com cardinalidade adequada; identificadores técnicos são excluídos."
+  ],
+  "dimensions": [],
+  "filters": [],
+  "insights": [],
+  "interactions": [],
+  "kpis": [],
+  "measures": [],
+  "objective": "Acompanhar indicadores e explorar as oportunidades analíticas sustentadas pelos dados.",
+  "recommended_pages": [],
+  "title": "Dashboard recomendado",
+  "warnings": [
+   "Não há insights de prioridade alta ou média suficientes para recomendar páginas.",
+   "O plano é uma proposta baseada em evidências estruturais; valide medidas, filtros e regras de negócio antes de construir o dashboard."
+  ]
+ },
+ "file_sha256": "fbe610a909b60ae80f8aa30c0cbd2908a0d474eb33b0e9d61cd2f55c2d32bab2",
+ "file_size_bytes": 60,
+ "file_type": "csv",
+ "filename": "iso_low_days.csv",
+ "human_summary": {
+  "analysis_opportunities": [],
+  "attention_points": [
+   {
+    "message": "Não foram encontradas combinações suficientes de dimensão, medida ou data para sugerir análises.",
+    "severity": "attention",
+    "source": "analysis"
+   }
+  ],
+  "dashboard_summary": "Ainda não há evidência suficiente para recomendar páginas de dashboard com segurança.",
+  "data_quality_summary": "Os dados apresentam qualidade excelente segundo as verificações realizadas. Resultado geral: 100.0/100.",
+  "executive_summary": "Analisamos 1 aba(s), 2 colunas e 4 linhas avaliadas. Não foram encontradas análises com evidência suficiente para destacar como prioritárias.",
+  "key_findings": [],
+  "quality_components": [
+   {
+    "description": "Quanto dos campos analisados está preenchido.",
+    "name": "Completude",
+    "value": 100.0
+   },
+   {
+    "description": "Se os valores seguem padrões compatíveis.",
+    "name": "Consistência",
+    "value": 100.0
+   },
+   {
+    "description": "Se os valores respeitam os formatos esperados.",
+    "name": "Validade",
+    "value": 100.0
+   },
+   {
+    "description": "Se há valores repetidos que podem afetar o uso dos campos ou registros.",
+    "name": "Unicidade",
+    "value": 100.0
+   }
+  ],
+  "technical_details_available": true,
+  "title": "Resumo da análise",
+  "what_was_found": [
+   "Foram identificadas 0 dimensão(ões) para agrupar comparações, 0 medida(s) que podem apoiar indicadores e 1 campo(s) de data.",
+   "Há campos de data, mas nenhum atende aos critérios atuais para uma análise de evolução confiável.",
+   "Esta tabela tem 4 registros e 2 colunas. A estrutura contém 1 campo(s) de identificação, 1 campo(s) de data."
+  ]
+ },
+ "insights": {
+  "candidate_count": 0,
+  "deduplicated_count": 0,
+  "duplicates_removed": 0,
+  "generated": true,
+  "items": [],
+  "top_limit": 12,
+  "warnings": [
+   "Não foram encontradas combinações suficientes de dimensão, medida ou data para sugerir análises."
+  ]
+ },
+ "kpis": {
+  "calculation_candidates": [],
+  "suggested": []
+ },
+ "quality": {
+  "alerts": [
+   {
+    "count": 0,
+    "message": "Nenhum alerta básico foi identificado pelas regras atuais.",
+    "severity": "ok"
+   }
+  ],
+  "classification": "Excelente",
+  "completeness_pct": 100.0,
+  "consistency_pct": 100.0,
+  "integrity_assessed": false,
+  "score": 100.0,
+  "uniqueness_pct": 100.0,
+  "validity_pct": 100.0
+ },
+ "relationships": [],
+ "security_warnings": [
+  "O arquivo foi lido localmente como texto; nenhum conteúdo foi executado."
+ ],
+ "semantic_model": {
+  "business_domains": [],
+  "calculated_candidates": [],
+  "dates": [
+   {
+    "completeness_pct": 100.0,
+    "confidence": "medium",
+    "distinct_count": 4,
+    "evidence": [
+     "Papel semântico do AnalysisResult: date (medium).",
+     "Preenchimento: 100.0%; cardinalidade: alta (4 valores distintos)."
+    ],
+    "format": "date",
+    "name": "data",
+    "reason": "Campo data/hora com 4 períodos mensais observados; tendência só é elegível com pelo menos 3 períodos, 6 datas distintas e 80% de preenchimento.",
+    "role": "date",
+    "source": "AnalysisResult",
+    "table": "Dados",
+    "temporal_periods": 4,
+    "temporal_support": false
+   }
+  ],
+  "dimensions": [],
+  "identifiers": [
+   {
+    "completeness_pct": 100.0,
+    "confidence": "high",
+    "distinct_count": 4,
+    "evidence": [
+     "Papel semântico do AnalysisResult: identifier (high).",
+     "Preenchimento: 100.0%; cardinalidade: alta (4 valores distintos)."
+    ],
+    "format": null,
+    "name": "id",
+    "reason": "Nome/papel semântico compatível e critérios de chave atendidos.",
+    "role": "identifier",
+    "source": "AnalysisResult",
+    "table": "Dados",
+    "temporal_periods": null,
+    "temporal_support": false
+   }
+  ],
+  "measures": [],
+  "possible_foreign_keys": [],
+  "relationships": [],
+  "semantic_warnings": [],
+  "table_type": "desconhecida",
+  "table_type_confidence": "low",
+  "tables": [
+   {
+    "confidence": "low",
+    "dates": [
+     {
+      "completeness_pct": 100.0,
+      "confidence": "medium",
+      "distinct_count": 4,
+      "evidence": [
+       "Papel semântico do AnalysisResult: date (medium).",
+       "Preenchimento: 100.0%; cardinalidade: alta (4 valores distintos)."
+      ],
+      "format": "date",
+      "name": "data",
+      "reason": "Campo data/hora com 4 períodos mensais observados; tendência só é elegível com pelo menos 3 períodos, 6 datas distintas e 80% de preenchimento.",
+      "role": "date",
+      "source": "AnalysisResult",
+      "table": "Dados",
+      "temporal_periods": 4,
+      "temporal_support": false
+     }
+    ],
+    "dimensions": [],
+    "evidence": [
+     "Classificação V1: possível tabela de referência (low)."
+    ],
+    "identifiers": [
+     {
+      "completeness_pct": 100.0,
+      "confidence": "high",
+      "distinct_count": 4,
+      "evidence": [
+       "Papel semântico do AnalysisResult: identifier (high).",
+       "Preenchimento: 100.0%; cardinalidade: alta (4 valores distintos)."
+      ],
+      "format": null,
+      "name": "id",
+      "reason": "Nome/papel semântico compatível e critérios de chave atendidos.",
+      "role": "identifier",
+      "source": "AnalysisResult",
+      "table": "Dados",
+      "temporal_periods": null,
+      "temporal_support": false
+     }
+    ],
+    "measures": [],
+    "name": "Dados",
+    "reason": "A tabela é compacta e possui alta unicidade por coluna.",
+    "table_type": "possível tabela de referência"
+   }
+  ]
+ },
+ "settings": {
+  "analysis_timeout_seconds": 300,
+  "csv_delimiter": ",",
+  "csv_encoding": "utf-8-sig",
+  "decimal_separator": ".",
+  "header_mode": "auto",
+  "max_batch_relationship_cells": 250000,
+  "max_cells_to_analyze": 250000,
+  "max_columns_to_analyze": 100,
+  "max_relationship_value_rows": 10000,
+  "max_rows_to_analyze": 200000,
+  "max_tables_to_analyze": 20,
+  "max_xlsx_profile_cells": 1000000,
+  "null_thresholds_pct": {
+   "attention": 5.0,
+   "critical_above": 20.0,
+   "moderate": 20.0
+  },
+  "percentiles": [
+   10.0,
+   90.0
+  ],
+  "quality_thresholds": {
+   "attention": 65.0,
+   "excellent": 95.0,
+   "good": 85.0
+  },
+  "quality_weights": {
+   "completeness": 0.3,
+   "consistency": 0.15,
+   "integrity": 0.1,
+   "uniqueness": 0.25,
+   "validity": 0.2
+  },
+  "sample_size": 100000,
+  "sampling_enabled": true,
+  "statistics_sampled": false
+ },
+ "status": "completed",
+ "structure_profiles": [
+  {
+   "candidate_foreign_keys": [],
+   "candidate_keys": [
+    {
+     "assessment": "strong_candidate",
+     "columns": [
+      "id"
+     ],
+     "completeness_pct": 100.0,
+     "confidence": "high",
+     "reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "nome ou papel semântico compatível com identificador"
+     ],
+     "uniqueness_pct": 100.0
+    }
+   ],
+   "column_count": 2,
+   "columns": [
+    {
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "high",
+     "distinct_count": 4,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "evidence": [
+      "O sistema classificou o campo como possível campo de identificação.",
+      "100.0% dos registros avaliados estão preenchidos.",
+      "Há 4 valores diferentes; a repetição observada é alta.",
+      "100.0% preenchida",
+      "100.0% única",
+      "nome ou papel semântico compatível com identificador"
+     ],
+     "inferred_type": "identificador",
+     "key_candidate": true,
+     "limitations": [
+      "O nome e o padrão dos valores não confirmam o significado de negócio deste campo."
+     ],
+     "name": "id",
+     "negative_count": 0,
+     "normalized_name": "id",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "physical_type": "integer",
+     "role": "identifier",
+     "role_label": "possível campo de identificação",
+     "sensitive": false,
+     "statistics": {
+      "max": 4,
+      "mean": 2.5,
+      "median": 2.5,
+      "min": 1,
+      "negative_count": 0,
+      "p10": 1.3,
+      "p90": 3.7,
+      "q1": 1.75,
+      "q3": 3.25,
+      "std_dev": 1.290994,
+      "zero_count": 0
+     },
+     "value_count": 4,
+     "zero_count": 0
+    },
+    {
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "medium",
+     "distinct_count": 4,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "evidence": [
+      "O sistema classificou o campo como campo que indica uma data.",
+      "100.0% dos registros avaliados estão preenchidos.",
+      "Há 4 valores diferentes; a repetição observada é alta.",
+      "Os valores puderam ser interpretados como datas."
+     ],
+     "inferred_type": "data",
+     "key_candidate": false,
+     "limitations": [
+      "O nome e o padrão dos valores não confirmam o significado de negócio deste campo."
+     ],
+     "name": "data",
+     "negative_count": 0,
+     "normalized_name": "data",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "physical_type": "string",
+     "role": "date",
+     "role_label": "campo que indica uma data",
+     "sensitive": false,
+     "statistics": {
+      "apparent_month_gaps": 3,
+      "by_month": {
+       "2024-01": 1,
+       "2024-03": 1,
+       "2024-05": 1,
+       "2024-07": 1
+      },
+      "by_year": {
+       "2024": 4
+      },
+      "max": "2024-07-08T00:00:00",
+      "min": "2024-01-02T00:00:00",
+      "periods": 4
+     },
+     "value_count": 4,
+     "zero_count": 0
+    }
+   ],
+   "confidence": "medium",
+   "dimensions": [],
+   "evaluated_row_count": 4,
+   "evidence": [
+    "100.0% preenchida",
+    "100.0% única",
+    "nome ou papel semântico compatível com identificador",
+    "A combinação foi observada como candidata a identificar registros.",
+    "1 campo(s) podem ajudar a identificar registros ou entidades.",
+    "1 campo(s) indicam datas ou períodos."
+   ],
+   "grain_hypothesis": {
+    "confidence": "high",
+    "evidence": [
+     "100.0% preenchida",
+     "100.0% única",
+     "nome ou papel semântico compatível com identificador",
+     "A combinação foi observada como candidata a identificar registros."
+    ],
+    "label": "Cada linha parece representar um registro separado, possivelmente identificado por id.",
+    "limitations": [
+     "A estrutura não confirma a regra de negócio nem uma chave primária oficial."
+    ]
+   },
+   "identifiers": [
+    "id"
+   ],
+   "limitations": [
+    "A estrutura não confirma a regra de negócio nem uma chave primária oficial.",
+    "A classificação descreve a estrutura, não o assunto ou a finalidade empresarial da tabela."
+   ],
+   "measures": [],
+   "relationships": [],
+   "row_count": 4,
+   "structural_warnings": [],
+   "summary": "Esta tabela tem 4 registros e 2 colunas. A estrutura contém 1 campo(s) de identificação, 1 campo(s) de data.",
+   "table_name": "Dados",
+   "table_type_hypotheses": [
+    {
+     "confidence": "medium",
+     "evidence": [
+      "1 campo(s) podem ajudar a identificar registros ou entidades.",
+      "1 campo(s) indicam datas ou períodos."
+     ],
+     "label": "Os dados podem formar um cadastro ou uma tabela de referência.",
+     "limitations": [
+      "A classificação descreve a estrutura, não o assunto ou a finalidade empresarial da tabela."
+     ]
+    }
+   ],
+   "temporal_columns": [
+    "data"
+   ],
+   "version": "1.0"
+  }
+ ],
+ "tables": [
+  {
+   "column_analyses": [
+    {
+     "anomalies": [],
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "medium",
+     "distinct_count": 4,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "empty": false,
+     "inconsistent_values": 0,
+     "inferred_type": "identificador",
+     "invalid_dates": 0,
+     "key_assessment": "strong_candidate",
+     "key_candidate": true,
+     "key_confidence": "high",
+     "key_reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "nome ou papel semântico compatível com identificador"
+     ],
+     "name": "id",
+     "negative_count": 0,
+     "null_classification": "sem valores ausentes",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "original_type": "str",
+     "physical_type": "integer",
+     "semantic_role": "identifier",
+     "semantic_role_confidence": "high",
+     "sensitive": false,
+     "sensitivity_confidence": "low",
+     "statistics": {
+      "max": 4,
+      "mean": 2.5,
+      "median": 2.5,
+      "min": 1,
+      "negative_count": 0,
+      "p10": 1.3,
+      "p90": 3.7,
+      "q1": 1.75,
+      "q3": 3.25,
+      "std_dev": 1.290994,
+      "zero_count": 0
+     },
+     "top_values": [
+      {
+       "count": 1,
+       "percent": 25.0
+      },
+      {
+       "count": 1,
+       "percent": 25.0
+      },
+      {
+       "count": 1,
+       "percent": 25.0
+      }
+     ],
+     "type_reason": "Tipo numérico com alta unicidade e nome compatível com identificador.",
+     "value_count": 4,
+     "zero_count": 0
+    },
+    {
+     "anomalies": [],
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "medium",
+     "distinct_count": 4,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "empty": false,
+     "inconsistent_values": 0,
+     "inferred_type": "data",
+     "invalid_dates": 0,
+     "key_assessment": "high_uniqueness_unconfirmed",
+     "key_candidate": false,
+     "key_reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "alta unicidade sem evidência semântica de identificador"
+     ],
+     "name": "data",
+     "negative_count": 0,
+     "null_classification": "sem valores ausentes",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "original_type": "str",
+     "physical_type": "string",
+     "semantic_role": "date",
+     "semantic_role_confidence": "medium",
+     "sensitive": false,
+     "sensitivity_confidence": "low",
+     "statistics": {
+      "apparent_month_gaps": 3,
+      "by_month": {
+       "2024-01": 1,
+       "2024-03": 1,
+       "2024-05": 1,
+       "2024-07": 1
+      },
+      "by_year": {
+       "2024": 4
+      },
+      "max": "2024-07-08T00:00:00",
+      "min": "2024-01-02T00:00:00",
+      "periods": 4
+     },
+     "top_values": [
+      {
+       "count": 1,
+       "percent": 25.0
+      },
+      {
+       "count": 1,
+       "percent": 25.0
+      },
+      {
+       "count": 1,
+       "percent": 25.0
+      }
+     ],
+     "type_reason": "100.0% dos valores correspondem a datas interpretáveis.",
+     "value_count": 4,
+     "zero_count": 0
+    }
+   ],
+   "columns": 2,
+   "columns_analyzed": 2,
+   "duplicate_rows": 0,
+   "empty_columns": 0,
+   "empty_rows": 0,
+   "header_detection": {},
+   "header_row_used": 1,
+   "key_candidates": [
+    {
+     "assessment": "strong_candidate",
+     "columns": [
+      "id"
+     ],
+     "completeness_pct": 100.0,
+     "confidence": "high",
+     "reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "nome ou papel semântico compatível com identificador"
+     ],
+     "uniqueness_pct": 100.0
+    }
+   ],
+   "name": "Dados",
+   "quality": {
+    "alerts": [
+     {
+      "count": 0,
+      "message": "Nenhum alerta básico foi identificado pelas regras atuais.",
+      "severity": "ok"
+     }
+    ],
+    "classification": "Excelente",
+    "completeness_pct": 100.0,
+    "consistency_pct": 100.0,
+    "integrity_assessed": false,
+    "score": 100.0,
+    "uniqueness_pct": 100.0,
+    "validity_pct": 100.0
+   },
+   "rows": 4,
+   "rows_analyzed": 4,
+   "rows_available": 4,
+   "rows_empty": 0,
+   "sampled": false,
+   "sampling_method": "none",
+   "status": "completed",
+   "table_type": "possível tabela de referência",
+   "table_type_confidence": "low",
+   "table_type_reason": "A tabela é compacta e possui alta unicidade por coluna.",
+   "trailing_empty_rows": 0
+  }
+ ],
+ "warnings": []
+}

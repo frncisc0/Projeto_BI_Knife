@@ -1,0 +1,661 @@
+{
+ "anomalies": [],
+ "dashboard_blueprint": {
+  "audience": "Equipe que acompanha os dados; um público de negócio mais específico não pode ser inferido com segurança.",
+  "design_rationale": [
+   "A Visão Geral reúne até cinco insights e seis KPIs priorizados.",
+   "Páginas temáticas só são criadas quando há um grupo coerente de insights ou uma análise de alta prioridade.",
+   "Filtros vêm de dimensões usadas nas análises e com cardinalidade adequada; identificadores técnicos são excluídos."
+  ],
+  "dimensions": [],
+  "filters": [],
+  "insights": [],
+  "interactions": [],
+  "kpis": [],
+  "measures": [
+   {
+    "confidence": "low",
+    "format": "decimal",
+    "name": "2",
+    "table": "Dados"
+   }
+  ],
+  "objective": "Acompanhar indicadores e explorar as oportunidades analíticas sustentadas pelos dados.",
+  "recommended_pages": [],
+  "title": "Dashboard recomendado",
+  "warnings": [
+   "Não há insights de prioridade alta ou média suficientes para recomendar páginas.",
+   "O plano é uma proposta baseada em evidências estruturais; valide medidas, filtros e regras de negócio antes de construir o dashboard."
+  ]
+ },
+ "file_sha256": "9ce6709bae269da59913a8b0972d5ce53b46369331a630cecc1f7b39e58dad23",
+ "file_size_bytes": 80,
+ "file_type": "csv",
+ "filename": "codes.csv",
+ "human_summary": {
+  "analysis_opportunities": [],
+  "attention_points": [
+   {
+    "message": "1 valores diferem do tipo inferido em 1 coluna(s); verifique o padrão identificado. (aba: Dados)",
+    "severity": "attention",
+    "source": "quality"
+   },
+   {
+    "message": "1 colunas apresentam mistura de tipos ou valores incompatíveis. (aba: Dados)",
+    "severity": "attention",
+    "source": "quality"
+   },
+   {
+    "message": "A presença de cabeçalho em 'Dados' é ambígua; a primeira linha foi tratada como dados e foram usados nomes genéricos para evitar expor possíveis valores no relatório.",
+    "severity": "attention",
+    "source": "analysis"
+   }
+  ],
+  "dashboard_summary": "Ainda não há evidência suficiente para recomendar páginas de dashboard com segurança.",
+  "data_quality_summary": "Os dados apresentam boa qualidade geral, com alguns pontos que podem merecer revisão. Resultado geral: 93.0/100.",
+  "executive_summary": "Analisamos 1 aba(s), 3 colunas e 5 linhas avaliadas. Não foram encontradas análises com evidência suficiente para destacar como prioritárias.",
+  "key_findings": [],
+  "quality_components": [
+   {
+    "description": "Quanto dos campos analisados está preenchido.",
+    "name": "Completude",
+    "value": 100.0
+   },
+   {
+    "description": "Se os valores seguem padrões compatíveis.",
+    "name": "Consistência",
+    "value": 66.7
+   },
+   {
+    "description": "Se os valores respeitam os formatos esperados.",
+    "name": "Validade",
+    "value": 93.3
+   },
+   {
+    "description": "Se há valores repetidos que podem afetar o uso dos campos ou registros.",
+    "name": "Unicidade",
+    "value": 100.0
+   }
+  ],
+  "technical_details_available": true,
+  "title": "Resumo da análise",
+  "what_was_found": [
+   "Foram identificadas 0 dimensão(ões) para agrupar comparações, 1 medida(s) que podem apoiar indicadores e 0 campo(s) de data.",
+   "Esta tabela tem 5 registros e 3 colunas. A estrutura contém 1 medida(s) que podem ser resumidas, 2 campo(s) descritivo(s)."
+  ]
+ },
+ "insights": {
+  "candidate_count": 1,
+  "deduplicated_count": 1,
+  "duplicates_removed": 0,
+  "generated": true,
+  "items": [
+   {
+    "business_question": "Qual é o valor de 2?",
+    "confidence": "low",
+    "dates": [],
+    "dimensions": [],
+    "evidence": [
+     "Papel semântico do AnalysisResult: measure (low).",
+     "Preenchimento: 100.0%; cardinalidade: alta (5 valores distintos)."
+    ],
+    "id": "kpi-2",
+    "measures": [
+     {
+      "column": "2",
+      "table": "Dados"
+     }
+    ],
+    "priority": "low",
+    "reason": "2 foi reconhecida como medida (decimal), com confiança low e preenchimento 100.0%. O score também considera a relevância semântica do nome e a qualidade geral dos dados.",
+    "relevance_score": 50,
+    "title": "2",
+    "type": "kpi",
+    "visual": "card/KPI",
+    "warnings": []
+   }
+  ],
+  "top_limit": 12,
+  "warnings": []
+ },
+ "kpis": {
+  "calculation_candidates": [],
+  "suggested": [
+   {
+    "confidence": "low",
+    "evidence": [
+     "Papel semântico do AnalysisResult: measure (low).",
+     "Preenchimento: 100.0%; cardinalidade: alta (5 valores distintos).",
+     "A coluna foi classificada como medida; nenhum valor individual é incluído."
+    ],
+    "measure": {
+     "column": "2",
+     "table": "Dados"
+    },
+    "name": "2",
+    "priority": "low",
+    "reason": "Campo identificado como medida pelo papel semântico; alta unicidade não o transforma em chave.",
+    "relevance_score": 50,
+    "table": "Dados"
+   }
+  ]
+ },
+ "quality": {
+  "alerts": [
+   {
+    "affected_columns": "2",
+    "count": 1,
+    "message": "1 valores diferem do tipo inferido em 1 coluna(s); verifique o padrão identificado.",
+    "recommendation": "Revise as colunas indicadas; a diferença pode ser legítima ou decorrer da inferência de tipo.",
+    "severity": "attention"
+   },
+   {
+    "count": 1,
+    "message": "1 colunas apresentam mistura de tipos ou valores incompatíveis.",
+    "recommendation": "Confira as colunas e confirme se os diferentes formatos são válidos para o processo.",
+    "severity": "attention"
+   }
+  ],
+  "classification": "Boa",
+  "completeness_pct": 100.0,
+  "consistency_pct": 66.7,
+  "integrity_assessed": false,
+  "score": 93.0,
+  "uniqueness_pct": 100.0,
+  "validity_pct": 93.3
+ },
+ "relationships": [],
+ "security_warnings": [
+  "O arquivo foi lido localmente como texto; nenhum conteúdo foi executado."
+ ],
+ "semantic_model": {
+  "business_domains": [],
+  "calculated_candidates": [],
+  "dates": [],
+  "dimensions": [],
+  "identifiers": [],
+  "measures": [
+   {
+    "completeness_pct": 100.0,
+    "confidence": "low",
+    "distinct_count": 5,
+    "evidence": [
+     "Papel semântico do AnalysisResult: measure (low).",
+     "Preenchimento: 100.0%; cardinalidade: alta (5 valores distintos)."
+    ],
+    "format": "decimal",
+    "name": "2",
+    "reason": "Campo identificado como medida pelo papel semântico; alta unicidade não o transforma em chave.",
+    "role": "measure",
+    "source": "AnalysisResult",
+    "table": "Dados",
+    "temporal_periods": null,
+    "temporal_support": false
+   }
+  ],
+  "possible_foreign_keys": [],
+  "relationships": [],
+  "semantic_warnings": [],
+  "table_type": "desconhecida",
+  "table_type_confidence": "low",
+  "tables": [
+   {
+    "confidence": "low",
+    "dates": [],
+    "dimensions": [],
+    "evidence": [
+     "Classificação V1: possível tabela de referência (low).",
+     "Semantic layer: 0 dimensões e 1 medidas elegíveis."
+    ],
+    "identifiers": [],
+    "measures": [
+     {
+      "completeness_pct": 100.0,
+      "confidence": "low",
+      "distinct_count": 5,
+      "evidence": [
+       "Papel semântico do AnalysisResult: measure (low).",
+       "Preenchimento: 100.0%; cardinalidade: alta (5 valores distintos)."
+      ],
+      "format": "decimal",
+      "name": "2",
+      "reason": "Campo identificado como medida pelo papel semântico; alta unicidade não o transforma em chave.",
+      "role": "measure",
+      "source": "AnalysisResult",
+      "table": "Dados",
+      "temporal_periods": null,
+      "temporal_support": false
+     }
+    ],
+    "name": "Dados",
+    "reason": "A tabela é compacta e possui alta unicidade por coluna.",
+    "table_type": "possível tabela de referência"
+   }
+  ]
+ },
+ "settings": {
+  "analysis_timeout_seconds": 300,
+  "csv_delimiter": ",",
+  "csv_encoding": "utf-8-sig",
+  "decimal_separator": ".",
+  "header_mode": "auto",
+  "max_batch_relationship_cells": 250000,
+  "max_cells_to_analyze": 250000,
+  "max_columns_to_analyze": 100,
+  "max_relationship_value_rows": 10000,
+  "max_rows_to_analyze": 200000,
+  "max_tables_to_analyze": 20,
+  "max_xlsx_profile_cells": 1000000,
+  "null_thresholds_pct": {
+   "attention": 5.0,
+   "critical_above": 20.0,
+   "moderate": 20.0
+  },
+  "percentiles": [
+   10.0,
+   90.0
+  ],
+  "quality_thresholds": {
+   "attention": 65.0,
+   "excellent": 95.0,
+   "good": 85.0
+  },
+  "quality_weights": {
+   "completeness": 0.3,
+   "consistency": 0.15,
+   "integrity": 0.1,
+   "uniqueness": 0.25,
+   "validity": 0.2
+  },
+  "sample_size": 100000,
+  "sampling_enabled": true,
+  "statistics_sampled": false
+ },
+ "status": "completed",
+ "structure_profiles": [
+  {
+   "candidate_foreign_keys": [],
+   "candidate_keys": [],
+   "column_count": 3,
+   "columns": [
+    {
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "low",
+     "distinct_count": 5,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "evidence": [
+      "O sistema classificou o campo como campo descritivo.",
+      "100.0% dos registros avaliados estão preenchidos.",
+      "Há 5 valores diferentes; a repetição observada é alta."
+     ],
+     "inferred_type": "categórico",
+     "key_candidate": false,
+     "limitations": [
+      "O nome e o padrão dos valores não confirmam o significado de negócio deste campo."
+     ],
+     "name": "0",
+     "negative_count": 0,
+     "normalized_name": "0",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "physical_type": "string",
+     "role": "text",
+     "role_label": "campo descritivo",
+     "sensitive": false,
+     "statistics": {
+      "category_count": 5,
+      "most_frequent_count": 1,
+      "most_frequent_pct": 20.0,
+      "top_category_concentration_pct": 60.0
+     },
+     "value_count": 5,
+     "zero_count": 0
+    },
+    {
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "low",
+     "distinct_count": 5,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "evidence": [
+      "O sistema classificou o campo como campo descritivo.",
+      "100.0% dos registros avaliados estão preenchidos.",
+      "Há 5 valores diferentes; a repetição observada é alta."
+     ],
+     "inferred_type": "categórico",
+     "key_candidate": false,
+     "limitations": [
+      "O nome e o padrão dos valores não confirmam o significado de negócio deste campo."
+     ],
+     "name": "1",
+     "negative_count": 0,
+     "normalized_name": "1",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "physical_type": "string",
+     "role": "text",
+     "role_label": "campo descritivo",
+     "sensitive": false,
+     "statistics": {
+      "category_count": 5,
+      "most_frequent_count": 1,
+      "most_frequent_pct": 20.0,
+      "top_category_concentration_pct": 60.0
+     },
+     "value_count": 5,
+     "zero_count": 0
+    },
+    {
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "low",
+     "distinct_count": 5,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "evidence": [
+      "O sistema classificou o campo como medida que pode ser resumida.",
+      "100.0% dos registros avaliados estão preenchidos.",
+      "Há 5 valores diferentes; a repetição observada é alta."
+     ],
+     "inferred_type": "numérico (texto)",
+     "key_candidate": false,
+     "limitations": [
+      "O nome e o padrão dos valores não confirmam o significado de negócio deste campo."
+     ],
+     "name": "2",
+     "negative_count": 0,
+     "normalized_name": "2",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "physical_type": "string",
+     "role": "measure",
+     "role_label": "medida que pode ser resumida",
+     "sensitive": false,
+     "statistics": {
+      "max": 10.0,
+      "mean": 5.25,
+      "median": 5.0,
+      "min": 1.0,
+      "negative_count": 0,
+      "p10": 1.6,
+      "p90": 9.1,
+      "q1": 2.5,
+      "q3": 7.75,
+      "std_dev": 4.031129,
+      "zero_count": 0
+     },
+     "value_count": 5,
+     "zero_count": 0
+    }
+   ],
+   "confidence": "low",
+   "dimensions": [],
+   "evaluated_row_count": 5,
+   "evidence": [
+    "Os campos avaliados não formam um padrão estrutural suficientemente claro.",
+    "1 campo(s) podem ser resumidos como medidas."
+   ],
+   "grain_hypothesis": {
+    "confidence": "low",
+    "evidence": [
+     "Os campos avaliados não formam um padrão estrutural suficientemente claro."
+    ],
+    "label": "Não foi possível determinar com segurança o que cada linha representa.",
+    "limitations": [
+     "A estrutura não confirma a regra de negócio nem uma chave primária oficial."
+    ]
+   },
+   "identifiers": [],
+   "limitations": [
+    "A estrutura não confirma a regra de negócio nem uma chave primária oficial.",
+    "A classificação descreve a estrutura, não o assunto ou a finalidade empresarial da tabela."
+   ],
+   "measures": [
+    "2"
+   ],
+   "relationships": [],
+   "row_count": 5,
+   "structural_warnings": [],
+   "summary": "Esta tabela tem 5 registros e 3 colunas. A estrutura contém 1 medida(s) que podem ser resumidas, 2 campo(s) descritivo(s).",
+   "table_name": "Dados",
+   "table_type_hypotheses": [
+    {
+     "confidence": "low",
+     "evidence": [
+      "1 campo(s) podem ser resumidos como medidas."
+     ],
+     "label": "Não foi possível determinar com segurança um tipo estrutural para esta tabela.",
+     "limitations": [
+      "A classificação descreve a estrutura, não o assunto ou a finalidade empresarial da tabela."
+     ]
+    }
+   ],
+   "temporal_columns": [],
+   "version": "1.0"
+  }
+ ],
+ "tables": [
+  {
+   "column_analyses": [
+    {
+     "anomalies": [],
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "medium",
+     "distinct_count": 5,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "empty": false,
+     "inconsistent_values": 0,
+     "inferred_type": "categórico",
+     "invalid_dates": 0,
+     "key_assessment": "high_uniqueness_unconfirmed",
+     "key_candidate": false,
+     "key_reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "alta unicidade sem evidência semântica de identificador"
+     ],
+     "name": "0",
+     "negative_count": 0,
+     "null_classification": "sem valores ausentes",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "original_type": "str",
+     "physical_type": "string",
+     "semantic_role": "text",
+     "semantic_role_confidence": "low",
+     "sensitive": false,
+     "sensitivity_confidence": "low",
+     "statistics": {
+      "category_count": 5,
+      "most_frequent_count": 1,
+      "most_frequent_pct": 20.0,
+      "top_category_concentration_pct": 60.0
+     },
+     "top_values": [
+      {
+       "count": 1,
+       "percent": 20.0
+      },
+      {
+       "count": 1,
+       "percent": 20.0
+      },
+      {
+       "count": 1,
+       "percent": 20.0
+      }
+     ],
+     "type_reason": "Os valores não atenderam aos critérios de tipo numérico, data ou booleano; foram tratados como categoria.",
+     "value_count": 5,
+     "zero_count": 0
+    },
+    {
+     "anomalies": [],
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "medium",
+     "distinct_count": 5,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "empty": false,
+     "inconsistent_values": 0,
+     "inferred_type": "categórico",
+     "invalid_dates": 0,
+     "key_assessment": "high_uniqueness_unconfirmed",
+     "key_candidate": false,
+     "key_reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "alta unicidade sem evidência semântica de identificador"
+     ],
+     "name": "1",
+     "negative_count": 0,
+     "null_classification": "sem valores ausentes",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "original_type": "str",
+     "physical_type": "string",
+     "semantic_role": "text",
+     "semantic_role_confidence": "low",
+     "sensitive": false,
+     "sensitivity_confidence": "low",
+     "statistics": {
+      "category_count": 5,
+      "most_frequent_count": 1,
+      "most_frequent_pct": 20.0,
+      "top_category_concentration_pct": 60.0
+     },
+     "top_values": [
+      {
+       "count": 1,
+       "percent": 20.0
+      },
+      {
+       "count": 1,
+       "percent": 20.0
+      },
+      {
+       "count": 1,
+       "percent": 20.0
+      }
+     ],
+     "type_reason": "Os valores não atenderam aos critérios de tipo numérico, data ou booleano; foram tratados como categoria.",
+     "value_count": 5,
+     "zero_count": 0
+    },
+    {
+     "anomalies": [],
+     "cardinality": "alta",
+     "completeness_pct": 100.0,
+     "confidence": "medium",
+     "distinct_count": 5,
+     "distinct_pct": 100.0,
+     "duplicate_count": 0,
+     "empty": false,
+     "inconsistent_values": 1,
+     "inferred_type": "numérico (texto)",
+     "invalid_dates": 0,
+     "key_assessment": "high_uniqueness_measure",
+     "key_candidate": false,
+     "key_reasons": [
+      "100.0% preenchida",
+      "100.0% única",
+      "coluna com natureza de medida; unicidade não comprova identificador"
+     ],
+     "name": "2",
+     "negative_count": 0,
+     "null_classification": "sem valores ausentes",
+     "null_count": 0,
+     "null_pct": 0.0,
+     "original_type": "str",
+     "physical_type": "string",
+     "semantic_role": "measure",
+     "semantic_role_confidence": "low",
+     "sensitive": false,
+     "sensitivity_confidence": "low",
+     "statistics": {
+      "max": 10.0,
+      "mean": 5.25,
+      "median": 5.0,
+      "min": 1.0,
+      "negative_count": 0,
+      "p10": 1.6,
+      "p90": 9.1,
+      "q1": 2.5,
+      "q3": 7.75,
+      "std_dev": 4.031129,
+      "zero_count": 0
+     },
+     "top_values": [
+      {
+       "count": 1,
+       "percent": 20.0
+      },
+      {
+       "count": 1,
+       "percent": 20.0
+      },
+      {
+       "count": 1,
+       "percent": 20.0
+      }
+     ],
+     "type_reason": "80.0% dos valores de texto podem ser convertidos em números.",
+     "value_count": 5,
+     "zero_count": 0
+    }
+   ],
+   "columns": 3,
+   "columns_analyzed": 3,
+   "duplicate_rows": 0,
+   "empty_columns": 0,
+   "empty_rows": 0,
+   "header_detection": {},
+   "key_candidates": [],
+   "name": "Dados",
+   "quality": {
+    "alerts": [
+     {
+      "affected_columns": "2",
+      "count": 1,
+      "message": "1 valores diferem do tipo inferido em 1 coluna(s); verifique o padrão identificado.",
+      "recommendation": "Revise as colunas indicadas; a diferença pode ser legítima ou decorrer da inferência de tipo.",
+      "severity": "attention"
+     },
+     {
+      "count": 1,
+      "message": "1 colunas apresentam mistura de tipos ou valores incompatíveis.",
+      "recommendation": "Confira as colunas e confirme se os diferentes formatos são válidos para o processo.",
+      "severity": "attention"
+     }
+    ],
+    "classification": "Boa",
+    "completeness_pct": 100.0,
+    "consistency_pct": 66.7,
+    "integrity_assessed": false,
+    "score": 93.0,
+    "uniqueness_pct": 100.0,
+    "validity_pct": 93.3
+   },
+   "rows": 5,
+   "rows_analyzed": 5,
+   "rows_available": 5,
+   "rows_empty": 0,
+   "sampled": false,
+   "sampling_method": "none",
+   "status": "completed",
+   "table_type": "possível tabela de referência",
+   "table_type_confidence": "low",
+   "table_type_reason": "A tabela é compacta e possui alta unicidade por coluna.",
+   "trailing_empty_rows": 0
+  }
+ ],
+ "warnings": [
+  "A presença de cabeçalho em 'Dados' é ambígua; a primeira linha foi tratada como dados e foram usados nomes genéricos para evitar expor possíveis valores no relatório."
+ ]
+}
