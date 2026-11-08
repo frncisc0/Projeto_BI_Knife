@@ -139,3 +139,16 @@ def test_untrusted_host_header_is_rejected():
         assert client.get("/api/health", headers={"host": "evil.example"}).status_code == 400
         assert client.get("/api/health", headers={"host": "127.0.0.1:8000"}).status_code == 200
         assert client.get("/api/health", headers={"host": "localhost:8000"}).status_code == 200
+
+
+# --- v3.0.2: values parsed as dates outside pandas' range must not crash -----
+
+def test_v302_out_of_range_date_candidates_do_not_crash_analysis():
+    from app.analyzers.date_parsing import parse_dates
+
+    parsed = parse_dates(pd.Series(["00123", "2024-01-10", "0099-01-01", "10/01/2024"]))
+    assert parsed.isna().tolist() == [True, False, True, False]
+    assert str(parsed.dtype) == "datetime64[ns]"
+    content = b"sku,descricao,qtd\nP12,Caneta,3\nAB-1001,Caderno,10\n00123,Borracha,7\nP900,Lapis,1\n"
+    report = analyze_file("codes.csv", "csv", content, "utf-8", header_mode="true")
+    assert _columns(report)["sku"].inferred_type == "categórico"
