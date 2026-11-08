@@ -23,3 +23,5 @@ cache/
 coverage.xml
 htmlcov/
 .ruff_cache/
+!tests/golden/inputs/*.csv
+!tests/golden/inputs/*.xlsx
