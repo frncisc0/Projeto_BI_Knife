@@ -1,6 +1,9 @@
 # Changelog
 
-## [Não lançado] — rumo à 3.1.0 (Fundação)
+## 3.0.3 — 2026-11-08
+
+### Corrigido
+- **CSV com mais de 50 mil linhas falhava na interface** com "O arquivo foi validado, mas não pôde ser analisado". O cálculo da barra de progresso pedia a posição do leitor (`tell()`), o que o pandas não permite durante a leitura em blocos. Agora o progresso é medido pelas linhas lidas. O bug existia desde a 3.0.0 e afetava só o fluxo com progresso, que é o usado pela interface. Teste: `test_v303_csv_larger_than_one_chunk_with_progress_callback`.
 
 ### Adicionado
 - **Conjunto-ouro** (`tests/golden`): 12 arquivos pequenos com valores esperados calculados à mão (CSV padrão Excel BR em cp1252, CSV internacional, datas ISO, moeda BR, códigos, RH com dados sensíveis, duplicados e nulos, XLSX com título e várias abas, modelo estrela entre CSVs). Funcionalidades ainda inexistentes ficam marcadas como `xfail` com a versão prevista.
