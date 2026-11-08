@@ -2,7 +2,7 @@
 
 ## Processamento
 
-O backend executa localmente. Não há API externa, analytics, telemetria, CDN obrigatório nem armazenamento em nuvem. O servidor de desenvolvimento documentado escuta em `127.0.0.1`. Não exponha a porta em interfaces de rede sem adicionar controles apropriados.
+O backend executa localmente. Não há API externa, analytics, telemetria, CDN obrigatório nem armazenamento em nuvem. O servidor de desenvolvimento documentado no README escuta em `127.0.0.1`, e a aplicação só aceita requisições com cabeçalho Host local (`127.0.0.1`, `localhost`; configurável por `BI_ALLOWED_HOSTS`), o que mitiga ataques de DNS rebinding. Não exponha a porta em interfaces de rede sem adicionar controles apropriados.
 
 ## Arquivos
 
@@ -19,7 +19,7 @@ O backend executa localmente. Não há API externa, analytics, telemetria, CDN o
 - A inferência de cabeçalho usa sinais do schema e transições estáveis de tipo; quando ainda houver ambiguidade, a interface pergunta se a primeira linha é cabeçalho ou dado, podendo manter nomes genéricos. Nenhum valor de célula é promovido silenciosamente a nome no relatório.
 - A comparação de relacionamentos entre CSVs usa apenas uma amostra limitada em memória durante o lote, ignora colunas classificadas como potencialmente sensíveis e descarta os quadros temporários ao final. Nenhum valor comparado aparece no relatório.
 - Logs técnicos registram somente tipo de erro; nunca conteúdo de células, caminhos ou linhas do arquivo.
-- O relatório não contém prévia de linhas ou rótulos de categoria. Estatísticas são suprimidas quando o nome de coluna sugere CPF/CNPJ, e-mail, telefone, nome, salário ou dados bancários. Essa proteção heurística não substitui revisão: nomes de coluna não detectados ainda podem conter informação sensível em métricas agregadas.
+- O relatório não contém prévia de linhas ou rótulos de categoria. Estatísticas e valores frequentes são suprimidos quando o nome da coluna indica dado pessoal: documentos (CPF, CNPJ, RG, CNH, passaporte, PIS/NIS), e-mail, telefone/celular, nome de pessoa (`nome`, `nome_cliente`, `nome_completo`; não `nome_produto`), remuneração (salário, remuneração, proventos), dados bancários (agência, conta bancária/corrente, PIX, cartão), data de nascimento e endereço; e quando os valores têm formato consistente de e-mail. A regra está em `app/analyzers/schema_analyzer.py` e é verificada por `tests/unit/test_v301_regressions.py`. Essa proteção heurística não substitui revisão: nomes de coluna não detectados ainda podem conter informação sensível em métricas agregadas.
 - O relatório inclui nome do arquivo, hash SHA-256, esquema, métricas agregadas e timestamp. Cabeçalhos são schema e permanecem visíveis; valores das células não são publicados. Exportações só são criadas localmente quando solicitadas pelo usuário.
 
 ## Ameaças consideradas e limites

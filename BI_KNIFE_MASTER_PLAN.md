@@ -30,6 +30,9 @@ Detalhes: [`docs/02_PRD.md`](docs/02_PRD.md)
 | D4 | `R$ 1.234` vira 1,234; `1.234.567` vira inválido | 🟠 |
 | D5 | CSV grande: perfila só as primeiras 25 mil linhas (2,5% de 1 milhão), com viés, e o relatório diz que não houve amostragem | 🟠 |
 | D6 | A análise trava o servidor durante a execução (endpoints síncronos) | 🟡 |
+| D7 | Datas `dd/mm/aaaa` viram número (`10012024`), achado durante a correção | 🔴 |
+
+> ✅ **D1–D7 corrigidos na v3.0.1** (branch `release/v3.0.1`, 157 testes passando).
 
 **Lacunas:** limpeza e transformação não existem (o produto é somente leitura); não há prévia de dados; não há saída para Power BI (M/DAX); o README não ensina a rodar; não há CI, lint, empacotamento nem histórico.
 **Arquitetura:** pastas bem separadas, mas a função central `analyze_file` tem ~300 linhas e há lógica duplicada em vários pontos.

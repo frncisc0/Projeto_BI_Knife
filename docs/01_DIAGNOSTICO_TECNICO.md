@@ -189,6 +189,13 @@ Legenda: **1** Implementada e funcional · **2** Parcial · **3** Existe com pro
 - **Reprodução:** durante a análise do CSV de 53 MB via `/api/analyze`, uma chamada a `/api/health` levou **4,9 s** (contra 0,01 s normalmente).
 - **Causa:** endpoints `async def` executam pandas de forma síncrona no event loop. O fluxo `/analyze-progress`, que o frontend usa, roda em thread e não sofre disso, mas `/analyze` e `/analyze-batch` sim.
 
+### D7 — Datas `dd/mm/aaaa` classificadas como número 🔴 P0 *(encontrado durante a correção, na v3.0.1)*
+- **Reprodução:** `10/01/2024` → `numeric_values` removia a `/` e gerava `10012024`, então a coluna virava "numérico (texto)", com média e desvio sem sentido.
+- **Impacto:** toda coluna de data no padrão do Excel brasileiro deixava de ser data.
+- **Status:** corrigido na v3.0.1, junto com o D3 (validação estrita do formato numérico).
+
+> **Status em 08/11/2026:** D1 a D7 corrigidos na branch `release/v3.0.1`, com testes de regressão em `tests/unit/test_v301_regressions.py` (157 testes passando).
+
 ### Outros achados (menor gravidade)
 - **Limiares de nulos iguais:** `null_moderate_threshold_pct = null_critical_threshold_pct = 20`, o que deixa a lógica de faixas confusa.
 - **`Settings` lê variáveis de ambiente na carga do módulo** (atributos de classe) e é cacheado com `lru_cache`, então é difícil configurar e testar.
